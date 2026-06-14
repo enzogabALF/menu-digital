@@ -1,6 +1,6 @@
 import { Mesa, Categoria, Producto, Pedido, DetallePedido, TableStatus, OrderStatus } from './types';
 
-// Datos iniciales semillas
+// Datos iniciales semillas para fallback
 const DEFAULT_MESAS: Mesa[] = [
   { id: 'mesa-1', numero: 1, estado: 'INACTIVE', mesaPadreId: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   { id: 'mesa-2', numero: 2, estado: 'INACTIVE', mesaPadreId: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
@@ -33,7 +33,6 @@ const DEFAULT_PRODUCTOS: Producto[] = [
   { id: 'prod-helado', nombre: 'Helado de 2 Bochas', descripcion: 'Crema americana y dulce de leche granizado', precio: 1600, categoriaId: 'cat-postres', activo: true },
 ];
 
-// Instancia de canal para sincronización en tiempo real
 let syncChannel: BroadcastChannel | null = null;
 const callbacks: Set<() => void> = new Set();
 
@@ -55,9 +54,23 @@ const notifyChanges = () => {
   callbacks.forEach((cb) => cb());
 };
 
-// Funciones helpers para localStorage
-const getStorageItem = <T>(key: string, defaultValue: T): T => {
-  if (typeof window === 'undefined') return defaultValue;
+// Funciones helper asíncronas para localStorage en fallback, o consultas al API sync route
+const getStorageItem = async <T>(key: string, defaultValue: T): Promise<T> => {
+  if (typeof window === 'undefined') {
+    return defaultValue;
+  }
+
+  try {
+    const res = await fetch(`/api/sync?key=${key}`);
+    if (res.ok) {
+      const data = await res.json();
+      return data as T;
+    }
+  } catch (e) {
+    console.error(`Error de fetch para la clave ${key}, usando localStorage fallback:`, e);
+  }
+
+  // Fallback a localStorage si el API no responde
   const item = localStorage.getItem(key);
   if (!item) {
     localStorage.setItem(key, JSON.stringify(defaultValue));
@@ -66,14 +79,24 @@ const getStorageItem = <T>(key: string, defaultValue: T): T => {
   return JSON.parse(item);
 };
 
-const setStorageItem = <T>(key: string, value: T): void => {
+const setStorageItem = async <T>(key: string, value: T): Promise<void> => {
   if (typeof window === 'undefined') return;
+
+  try {
+    await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value })
+    });
+  } catch (e) {
+    console.error(`Error de sync POST para la clave ${key}, guardando localmente:`, e);
+  }
+
   localStorage.setItem(key, JSON.stringify(value));
   notifyChanges();
 };
 
 export const MockService = {
-  // Suscripción a cambios
   onSync(callback: () => void): () => void {
     callbacks.add(callback);
     return () => {
@@ -83,7 +106,7 @@ export const MockService = {
 
   // MESAS
   async getMesas(): Promise<Mesa[]> {
-    return getStorageItem('md_mesas', DEFAULT_MESAS);
+    return await getStorageItem('md_mesas', DEFAULT_MESAS);
   },
 
   async getMesa(idOrNumero: string | number): Promise<Mesa | null> {
@@ -92,7 +115,9 @@ export const MockService = {
     if (!isNaN(numero)) {
       return mesas.find((m) => m.numero === numero) || mesas.find((m) => m.id === idOrNumero) || null;
     }
-    return mesas.find((m) => m.id === idOrNumero) || null;
+    // Si contiene 'mesa-', buscar por ID
+    const cleanId = typeof idOrNumero === 'string' ? idOrNumero : `mesa-${idOrNumero}`;
+    return mesas.find((m) => m.id === cleanId) || mesas.find((m) => m.id === idOrNumero) || null;
   },
 
   async setMesaEstado(id: string, estado: TableStatus): Promise<Mesa> {
@@ -106,7 +131,6 @@ export const MockService = {
     // Si se desactiva una mesa combinada, descombinamos
     if (estado === 'INACTIVE') {
       mesas[index]!.mesaPadreId = null;
-      // También descombinamos las mesas que dependían de esta
       mesas.forEach((m) => {
         if (m.mesaPadreId === id) {
           m.mesaPadreId = null;
@@ -115,7 +139,7 @@ export const MockService = {
       });
     }
 
-    setStorageItem('md_mesas', mesas);
+    await setStorageItem('md_mesas', mesas);
     return mesas[index]!;
   },
 
@@ -127,16 +151,14 @@ export const MockService = {
     if (!mesaA || !mesaB) throw new Error('Mesa(s) no encontrada(s)');
     if (mesaIdA === mesaIdB) throw new Error('No puedes combinar una mesa consigo misma');
 
-    // La mesa B ahora apunta a la mesa A como padre
     mesaB.mesaPadreId = mesaIdA;
-    mesaB.estado = 'ACTIVE'; // Activamos automáticamente la mesa secundaria combinada
+    mesaB.estado = 'ACTIVE';
     mesaB.updatedAt = new Date().toISOString();
 
-    // Aseguramos que la mesa A esté activa
     mesaA.estado = 'ACTIVE';
     mesaA.updatedAt = new Date().toISOString();
 
-    setStorageItem('md_mesas', mesas);
+    await setStorageItem('md_mesas', mesas);
   },
 
   async descombinarMesa(mesaId: string): Promise<void> {
@@ -147,7 +169,7 @@ export const MockService = {
     mesa.mesaPadreId = null;
     mesa.updatedAt = new Date().toISOString();
 
-    setStorageItem('md_mesas', mesas);
+    await setStorageItem('md_mesas', mesas);
   },
 
   // CATEGORIAS & PRODUCTOS
@@ -165,11 +187,10 @@ export const MockService = {
 
   // PEDIDOS
   async getPedidos(): Promise<Pedido[]> {
-    const pedidos = getStorageItem<Pedido[]>('md_pedidos', []);
+    const pedidos = await getStorageItem<Pedido[]>('md_pedidos', []);
     const productos = await this.getProductos();
     const mesas = await this.getMesas();
 
-    // Enriquecemos con los objetos reales de productos y mesas para facilidad de uso
     return pedidos.map((pedido) => ({
       ...pedido,
       mesa: mesas.find((m) => m.id === pedido.mesaId),
@@ -187,7 +208,6 @@ export const MockService = {
 
     if (!mesa) return [];
 
-    // Si la mesa está combinada con un padre, sumamos los pedidos del grupo
     const mesaPadreId = mesa.mesaPadreId || mesa.id;
     const mesasHijasIds = mesas.filter((m) => m.mesaPadreId === mesaPadreId).map((m) => m.id);
     const grupoMesasIds = [mesaPadreId, ...mesasHijasIds];
@@ -201,10 +221,7 @@ export const MockService = {
     if (!mesa) throw new Error('Mesa no encontrada');
     if (mesa.estado === 'INACTIVE') throw new Error('La mesa no está activa');
 
-    const pedidos = getStorageItem<Pedido[]>('md_pedidos', []);
-
-    // Buscar si ya hay un pedido activo (que no esté ENTREGADO) para esta mesa
-    // Si la mesa está combinada, buscamos para la mesa principal (mesaPadreId o mesa.id)
+    const pedidos = await getStorageItem<Pedido[]>('md_pedidos', []);
     const targetMesaId = mesa.mesaPadreId || mesa.id;
     
     let pedidoActivo = pedidos.find(
@@ -212,7 +229,6 @@ export const MockService = {
     );
 
     if (pedidoActivo) {
-      // Si ya tiene un pedido activo, le agregamos los productos nuevos
       return this.agregarProductosAPedido(pedidoActivo.id, items);
     }
 
@@ -234,27 +250,23 @@ export const MockService = {
     };
 
     pedidos.push(nuevoPedido);
-    setStorageItem('md_pedidos', pedidos);
+    await setStorageItem('md_pedidos', pedidos);
 
     const allPeds = await this.getPedidos();
     return allPeds.find((p) => p.id === nuevoPedidoId)!;
   },
 
   async agregarProductosAPedido(pedidoId: string, items: { productoId: string; cantidad: number }[]): Promise<Pedido> {
-    const pedidos = getStorageItem<Pedido[]>('md_pedidos', []);
+    const pedidos = await getStorageItem<Pedido[]>('md_pedidos', []);
     const index = pedidos.findIndex((p) => p.id === pedidoId);
     if (index === -1) throw new Error('Pedido no encontrado');
 
     const pedido = pedidos[index]!;
-    
-    // Si el pedido ya fue entregado, no podemos agregar ítems directamente a esta instancia de pedido
     if (pedido.estado === 'ENTREGADO') {
       throw new Error('El pedido ya ha sido entregado');
     }
 
-    // Agregar nuevos detalles
     items.forEach((item) => {
-      // Buscamos si el ítem ya existe y no está entregado aún para incrementar cantidad
       const detalleExistente = pedido.detalles.find(
         (d) => d.productoId === item.productoId && !d.entregado
       );
@@ -273,16 +285,16 @@ export const MockService = {
       }
     });
 
-    pedido.estado = 'ESPERA'; // Vuelve a "ESPERA" ya que entraron cosas nuevas
+    pedido.estado = 'ESPERA';
     pedido.updatedAt = new Date().toISOString();
 
-    setStorageItem('md_pedidos', pedidos);
+    await setStorageItem('md_pedidos', pedidos);
     const allPeds = await this.getPedidos();
     return allPeds.find((p) => p.id === pedidoId)!;
   },
 
   async quitarProductoDePedido(pedidoId: string, detalleId: string): Promise<Pedido> {
-    const pedidos = getStorageItem<Pedido[]>('md_pedidos', []);
+    const pedidos = await getStorageItem<Pedido[]>('md_pedidos', []);
     const index = pedidos.findIndex((p) => p.id === pedidoId);
     if (index === -1) throw new Error('Pedido no encontrado');
 
@@ -299,16 +311,14 @@ export const MockService = {
       throw new Error('No puedes quitar un producto que ya ha sido entregado');
     }
 
-    // Remover
     pedido.detalles.splice(detIndex, 1);
     pedido.updatedAt = new Date().toISOString();
 
-    // Si el pedido se queda sin detalles, lo removemos de la lista
     if (pedido.detalles.length === 0) {
       pedidos.splice(index, 1);
     }
 
-    setStorageItem('md_pedidos', pedidos);
+    await setStorageItem('md_pedidos', pedidos);
     const allPeds = await this.getPedidos();
     return allPeds.find((p) => p.id === pedidoId) || {
       id: pedidoId,
@@ -321,27 +331,26 @@ export const MockService = {
   },
 
   async actualizarEstadoPedido(pedidoId: string, estado: OrderStatus): Promise<Pedido> {
-    const pedidos = getStorageItem<Pedido[]>('md_pedidos', []);
+    const pedidos = await getStorageItem<Pedido[]>('md_pedidos', []);
     const index = pedidos.findIndex((p) => p.id === pedidoId);
     if (index === -1) throw new Error('Pedido no encontrado');
 
     pedidos[index]!.estado = estado;
     pedidos[index]!.updatedAt = new Date().toISOString();
 
-    // Si pasa a listo o entregado, marcamos todos sus ítems como entregados automáticamente
     if (estado === 'LISTO' || estado === 'ENTREGADO') {
       pedidos[index]!.detalles.forEach((d) => {
         d.entregado = true;
       });
     }
 
-    setStorageItem('md_pedidos', pedidos);
+    await setStorageItem('md_pedidos', pedidos);
     const allPeds = await this.getPedidos();
     return allPeds.find((p) => p.id === pedidoId)!;
   },
 
   async actualizarDetalleEntregado(pedidoId: string, detalleId: string, entregado: boolean): Promise<Pedido> {
-    const pedidos = getStorageItem<Pedido[]>('md_pedidos', []);
+    const pedidos = await getStorageItem<Pedido[]>('md_pedidos', []);
     const index = pedidos.findIndex((p) => p.id === pedidoId);
     if (index === -1) throw new Error('Pedido no encontrado');
 
@@ -352,13 +361,12 @@ export const MockService = {
     det.entregado = entregado;
     pedido.updatedAt = new Date().toISOString();
 
-    // Si todos los ítems fueron entregados, marcamos el pedido como entregado
     const todosEntregados = pedido.detalles.every((d) => d.entregado);
     if (todosEntregados) {
       pedido.estado = 'ENTREGADO';
     }
 
-    setStorageItem('md_pedidos', pedidos);
+    await setStorageItem('md_pedidos', pedidos);
     const allPeds = await this.getPedidos();
     return allPeds.find((p) => p.id === pedidoId)!;
   },
