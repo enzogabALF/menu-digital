@@ -9,7 +9,7 @@ function ClienteContent() {
   const { db, tick } = useMenuSync();
   const searchParams = useSearchParams();
 
-  // Obtener mesa de la URL (?mesa=3)
+  // Obtener mesa de la URL (?mesa=3) o del selector local
   const mesaParam = searchParams.get('mesa');
   const [mesaSelector, setMesaSelector] = useState<string>('');
 
@@ -18,9 +18,9 @@ function ClienteContent() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [categorias, setCategorias] = useState<{ id: string; nombre: string }[]>([]);
 
-  // Carrito local antes de enviar
+  // Carrito local de compras
   const [cart, setCart] = useState<{ [productoId: string]: number }>({});
-  // Vista actual: 'menu' o 'estado'
+  // Vista activa: 'menu' (Carta) o 'estado' (Mi Pedido)
   const [currentView, setCurrentView] = useState<'menu' | 'estado'>('menu');
   const [activeCategory, setActiveCategory] = useState<string>('cat-entradas');
 
@@ -118,34 +118,56 @@ function ClienteContent() {
 
   // Obtener el pedido actual de esta mesa (que no esté ENTREGADO)
   const pedidoActivo = mesa ? pedidos.find((p) => p.mesaId === mesa.id && p.estado !== 'ENTREGADO') : null;
-  // Obtener pedidos ya entregados en el historial de esta mesa (para poder pedir más)
+  // Historial de pedidos entregados de esta mesa
   const historialPedidos = mesa ? pedidos.filter((p) => p.mesaId === mesa.id && p.estado === 'ENTREGADO') : [];
 
-  // 1. PANTALLA DE SIMULACIÓN DE ESCANEO QR (SI NO HAY MESA SELECCIONADA)
+  // 1. PANTALLA DE SIMULACIÓN DE ESCANEO QR (SI NO HAY MESA ACTIVA)
   if (!mesa) {
     return (
-      <div className="mobile-wrapper">
-        <header className="app-header">
-          <h1 className="app-title">Escaneo de QR Digital</h1>
+      <div className="mobile-wrapper" style={{ padding: '1rem', justifyContent: 'center' }}>
+        <header className="app-header" style={{ borderBottom: 'none', background: 'transparent', padding: '1rem 0' }}>
+          <h1 className="app-title" style={{ fontSize: '1.8rem', textAlign: 'center', width: '100%' }}>
+            📱 Escaneo QR Menú Digital
+          </h1>
         </header>
-        <div className="app-content" style={{ justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-          <div className="card" style={{ width: '100%' }}>
-            <h2 className="card-title">Simulador de Código QR</h2>
-            <p className="card-desc">Ingresa el número de mesa que deseas simular haber escaneado:</p>
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-              {[1, 2, 3, 4, 5].map((num) => (
-                <button
-                  key={num}
-                  className="btn btn-secondary"
-                  onClick={() => setMesaSelector(num.toString())}
-                  style={{ flex: 1 }}
-                >
-                  Mesa {num}
-                </button>
-              ))}
+
+        <div className="app-content" style={{ justifyContent: 'center', alignItems: 'center', gap: '1.5rem' }}>
+          <div className="card" style={{ width: '100%', padding: '1.5rem', boxShadow: '0 8px 30px rgba(0,0,0,0.06)' }}>
+            <h2 className="card-title" style={{ fontSize: '1.2rem', marginBottom: '0.5rem', textAlign: 'center' }}>
+              Simulador de Salón (Mesas 1-9)
+            </h2>
+            <p className="card-desc" style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+              Seleccione la mesa que desea emular haber escaneado con su teléfono:
+            </p>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '0.75rem'
+            }}>
+              {Array.from({ length: 9 }).map((_, i) => {
+                const num = i + 1;
+                return (
+                  <button
+                    key={num}
+                    className="btn btn-secondary"
+                    onClick={() => setMesaSelector(`mesa-${num}`)}
+                    style={{
+                      padding: '0.8rem 0',
+                      fontWeight: 'bold',
+                      fontSize: '0.95rem',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--border-radius-md)'
+                    }}
+                  >
+                    Mesa {num}
+                  </button>
+                );
+              })}
             </div>
-            <p className="card-desc" style={{ marginTop: '1rem', fontStyle: 'italic' }}>
-              Tip: También puedes pasar la mesa por parámetro en la URL, ej: ?mesa=3
+
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '1.5rem', textAlign: 'center', fontStyle: 'italic' }}>
+              * Tip: También puede forzar una mesa en la URL: <code>?mesa=mesa-3</code>
             </p>
           </div>
         </div>
@@ -156,21 +178,31 @@ function ClienteContent() {
   // 2. PANTALLA DE MESA INACTIVA
   if (mesa.estado === 'INACTIVE') {
     return (
-      <div className="mobile-wrapper">
-        <header className="app-header">
+      <div className="mobile-wrapper" style={{ padding: '1rem' }}>
+        <header className="app-header" style={{ borderBottom: 'none' }}>
           <h1 className="app-title">Mesa {mesa.numero}</h1>
-          <button className="btn btn-secondary" onClick={() => { setMesaSelector(''); window.history.pushState({}, '', '/'); }} style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              setMesaSelector('');
+              window.history.pushState({}, '', '/');
+            }}
+            style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
+          >
             Salir
           </button>
         </header>
+
         <div className="app-content" style={{ justifyContent: 'center', textAlign: 'center' }}>
-          <div className="card" style={{ border: '2px solid #ff3b30', padding: '2rem' }}>
-            <h2 className="card-title" style={{ color: '#ff3b30' }}>🔒 Mesa Inactiva</h2>
-            <p className="card-desc" style={{ margin: '1rem 0' }}>
-              Esta mesa no ha sido habilitada por el mesero aún.
+          <div className="card" style={{ border: '2px solid var(--color-danger)', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <h2 className="card-title" style={{ color: 'var(--color-danger)', fontSize: '1.4rem' }}>
+              🔒 Mesa Desactivada
+            </h2>
+            <p className="card-desc" style={{ fontSize: '0.95rem' }}>
+              El código QR de la <strong>Mesa {mesa.numero}</strong> aún no está habilitado para pedidos.
             </p>
-            <p className="card-desc">
-              Por favor, solicite al personal del restaurante que active la <strong>Mesa {mesa.numero}</strong> para poder ver la carta y pedir.
+            <p className="card-desc" style={{ fontSize: '0.85rem' }}>
+              Por favor, solicite a un mesero que habilite su mesa desde su terminal para poder visualizar la carta y enviar sus platos.
             </p>
           </div>
         </div>
@@ -178,83 +210,201 @@ function ClienteContent() {
     );
   }
 
-  // 3. FLUJO ACTIVO DE MENÚ / PEDIDOS
+  // 3. WIDGET DE TIEMPOS DE ESPERA SEMÁNTICO
+  const renderTimerWidget = () => {
+    const isDelayed = pedidoActivo?.estado === 'RETRAZO';
+    const bg = isDelayed ? 'var(--color-danger-bg)' : 'rgba(46, 125, 50, 0.08)';
+    const color = isDelayed ? 'var(--color-danger)' : 'var(--color-success)';
+    const icon = isDelayed ? '🚨' : '🔔';
+    const text = isDelayed ? 'Demoras en Cocina: ~20 min' : 'Cocina a tiempo (0 min de retraso)';
+
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: bg,
+        color: color,
+        border: `1px solid ${color}`,
+        padding: '0.65rem 0.85rem',
+        borderRadius: 'var(--border-radius-md)',
+        fontSize: '0.8rem',
+        fontWeight: 700,
+        marginBottom: '0.5rem',
+        animation: isDelayed ? 'pulse 2s infinite' : 'none'
+      }}>
+        <span>⏱️ Tiempo estimado:</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          {text} {icon}
+        </span>
+      </div>
+    );
+  };
+
+  // 4. FLUJO DE NAVEGACIÓN ACTIVO (CLIENTE HABILITADO)
   return (
     <div className="mobile-wrapper">
+      
       {/* Header */}
       <header className="app-header">
         <div>
-          <h1 className="app-title">Mesa {mesa.numero}</h1>
-          <p className="app-subtitle">Menú Digital</p>
+          <h1 className="app-title" style={{ fontSize: '1.3rem', color: 'var(--text-primary)' }}>
+            Mesa #{mesa.numero}
+          </h1>
+          <p className="app-subtitle" style={{ fontSize: '0.75rem' }}>Menú Digital Autoservicio</p>
         </div>
         <button
           className="btn btn-secondary"
-          onClick={() => { setMesaSelector(''); window.history.pushState({}, '', '/'); }}
-          style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
+          onClick={() => {
+            setMesaSelector('');
+            window.history.pushState({}, '', '/');
+          }}
+          style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
         >
-          Salir
+          Cambiar Mesa
         </button>
       </header>
 
-      {/* Navegación de Vistas */}
+      {/* Selector de Vistas de Pestaña */}
       <div className="tab-group">
         <button
           className={`tab-btn ${currentView === 'menu' ? 'active' : ''}`}
           onClick={() => setCurrentView('menu')}
+          style={{ fontSize: '0.9rem' }}
         >
-          📖 Ver Carta
+          📖 Nuestra Carta
         </button>
         <button
           className={`tab-btn ${currentView === 'estado' ? 'active' : ''}`}
           onClick={() => setCurrentView('estado')}
+          style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}
         >
-          ⏳ Mi Pedido {pedidoActivo ? '•' : ''}
+          ⏳ Mi Estado
+          {pedidoActivo && (
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: pedidoActivo.estado === 'RETRAZO' ? 'var(--color-danger)' : 'var(--color-success)',
+              display: 'inline-block'
+            }} />
+          )}
         </button>
       </div>
 
-      <div className="app-content" style={{ paddingBottom: '80px' }}>
-        {/* VISTA A: COMPRAR / NAVEGAR MENÚ */}
+      <div className="app-content" style={{ paddingBottom: '90px' }}>
+        
+        {/* Render del Widget de Tiempos de Espera */}
+        {renderTimerWidget()}
+
+        {/* VISTA A: NAVEGAR MENÚ Y AÑADIR A CARRO */}
         {currentView === 'menu' && (
           <>
-            {/* Categorías */}
-            <div className="tab-group" style={{ border: 'none', gap: '0.25rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+            {/* Chips de Categorías (Horizontal Scroll) */}
+            <div style={{
+              display: 'flex',
+              gap: '0.4rem',
+              overflowX: 'auto',
+              paddingBottom: '0.6rem',
+              borderBottom: '1px solid var(--border-color)',
+              marginBottom: '0.75rem',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none'
+            }}>
               {categorias.map((cat) => (
                 <button
                   key={cat.id}
-                  className={`btn ${activeCategory === cat.id ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setActiveCategory(cat.id)}
-                  style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                  style={{
+                    padding: '0.45rem 0.85rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    borderRadius: '50px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: activeCategory === cat.id ? 'var(--color-primary)' : 'var(--bg-primary)',
+                    color: activeCategory === cat.id ? '#FFFFFF' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.2s ease'
+                  }}
                 >
                   {cat.nombre}
                 </button>
               ))}
             </div>
 
-            {/* Listado de Productos */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
+            {/* Listado de Platos */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {productos
                 .filter((p) => p.categoriaId === activeCategory && p.activo)
                 .map((prod) => {
                   const qty = cart[prod.id] || 0;
                   return (
-                    <div key={prod.id} className="card">
+                    <div
+                      key={prod.id}
+                      className="card"
+                      style={{
+                        padding: '0.85rem',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                        transition: 'box-shadow 0.2s ease'
+                      }}
+                    >
                       <div className="flex-between">
-                        <span className="card-title">{prod.nombre}</span>
-                        <span className="card-price">${prod.precio}</span>
+                        <span className="card-title" style={{ fontSize: '0.95rem', fontWeight: 700 }}>
+                          {prod.nombre}
+                        </span>
+                        <span className="card-price" style={{ fontSize: '1rem', fontWeight: 800 }}>
+                          ${prod.precio.toLocaleString('es-AR')}
+                        </span>
                       </div>
-                      {prod.descripcion && <p className="card-desc">{prod.descripcion}</p>}
-                      <div className="flex-between" style={{ marginTop: '0.5rem' }}>
+                      
+                      {prod.descripcion && (
+                        <p className="card-desc" style={{ fontSize: '0.78rem', margin: '0.25rem 0 0.5rem 0', lineHeight: 1.3 }}>
+                          {prod.descripcion}
+                        </p>
+                      )}
+
+                      {/* +/- Selector visual integrado */}
+                      <div className="flex-between" style={{ marginTop: '0.5rem', alignItems: 'center' }}>
                         <div></div>
-                        <div className="flex-gap-sm">
-                          {qty > 0 && (
+                        <div className="flex-gap-sm" style={{ alignItems: 'center' }}>
+                          {qty > 0 ? (
                             <>
-                              <button className="btn btn-secondary" onClick={() => updateCartQty(prod.id, -1)} style={{ padding: '0.2rem 0.6rem' }}>-</button>
-                              <span style={{ alignSelf: 'center', fontWeight: 'bold' }}>{qty}</span>
+                              <button
+                                className="btn btn-secondary"
+                                onClick={() => updateCartQty(prod.id, -1)}
+                                style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                              >
+                                -
+                              </button>
+                              <span style={{ minWidth: '20px', textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                                {qty}
+                              </span>
+                              <button
+                                className="btn btn-primary"
+                                onClick={() => updateCartQty(prod.id, 1)}
+                                style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                              >
+                                +
+                              </button>
                             </>
+                          ) : (
+                            <button
+                              className="btn"
+                              onClick={() => updateCartQty(prod.id, 1)}
+                              style={{
+                                padding: '0.35rem 0.85rem',
+                                borderRadius: 'var(--border-radius-sm)',
+                                border: '1px solid var(--color-primary)',
+                                color: 'var(--color-primary)',
+                                background: 'transparent',
+                                fontWeight: 700,
+                                fontSize: '0.8rem'
+                              }}
+                            >
+                              Agregar
+                            </button>
                           )}
-                          <button className="btn btn-primary" onClick={() => updateCartQty(prod.id, 1)} style={{ padding: '0.2rem 0.6rem' }}>
-                            {qty === 0 ? 'Agregar' : '+'}
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -264,41 +414,56 @@ function ClienteContent() {
           </>
         )}
 
-        {/* VISTA B: ESTADO DEL PEDIDO / EDICIÓN */}
+        {/* VISTA B: PENDIENTES, HISTORIAL Y DETALLES DE PEDIDO */}
         {currentView === 'estado' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* Pedido Activo */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            
+            {/* Tarjeta de Pedido en Curso */}
             {pedidoActivo ? (
-              <div className="card" style={{ border: '2px solid var(--text-primary)' }}>
-                <div className="flex-between">
-                  <strong style={{ fontSize: '1.1rem' }}>Pedido en Curso</strong>
-                  <span className="badge badge-active">{pedidoActivo.estado}</span>
+              <div className="card" style={{ border: '2px solid var(--text-primary)', padding: '1rem' }}>
+                <div className="flex-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                  <strong style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>Mesa {mesa.numero} • Pedido</strong>
+                  
+                  <span style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    color: pedidoActivo.estado === 'RETRAZO' ? 'var(--color-danger)' : 'var(--color-success)',
+                    padding: '0.2rem 0.5rem',
+                    backgroundColor: pedidoActivo.estado === 'RETRAZO' ? 'var(--color-danger-bg)' : 'rgba(46, 125, 50, 0.08)',
+                    borderRadius: 'var(--border-radius-sm)',
+                    border: `1px solid ${pedidoActivo.estado === 'RETRAZO' ? 'var(--color-danger)' : 'var(--color-success)'}`
+                  }}>
+                    {pedidoActivo.estado === 'RETRAZO' ? 'Retrasado 🚨' : pedidoActivo.estado}
+                  </span>
                 </div>
-                <p className="card-desc" style={{ fontSize: '0.8rem' }}>ID: {pedidoActivo.id}</p>
+                
+                <p className="card-desc" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>ID: {pedidoActivo.id}</p>
 
-                {/* Ítems del pedido activo */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                {/* Tabla de ítems con restricciones */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.5rem' }}>
                   {pedidoActivo.detalles.map((det) => {
-                    // Se pueden quitar productos siempre que:
-                    // 1. El item no esté marcado como entregado.
-                    // 2. El pedido entero no esté en LISTO o ENTREGADO.
+                    // Restricción: No se puede quitar si ya fue entregado por cocina, o si el pedido ya está LISTO/ENTREGADO
                     const sePuedeQuitar = !det.entregado && pedidoActivo.estado !== 'LISTO' && pedidoActivo.estado !== 'ENTREGADO';
 
                     return (
-                      <div key={det.id} className="flex-between" style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--border-color)' }}>
+                      <div key={det.id} className="flex-between" style={{ padding: '0.5rem 0', borderBottom: '1px dashed var(--border-color)' }}>
                         <div>
-                          <span>{det.producto?.nombre} x {det.cantidad}</span>
-                          <div style={{ fontSize: '0.75rem', color: det.entregado ? 'green' : 'var(--text-muted)' }}>
-                            {det.entregado ? '✓ Entregado' : '⏳ Pendiente de entrega'}
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                            {det.producto?.nombre} <strong style={{ color: 'var(--color-primary)' }}>x{det.cantidad}</strong>
+                          </span>
+                          <div style={{ fontSize: '0.7rem', color: det.entregado ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: 500 }}>
+                            {det.entregado ? '✓ Servido en Mesa' : '⏳ En preparación...'}
                           </div>
                         </div>
+                        
                         {sePuedeQuitar && (
                           <button
                             className="btn btn-danger"
                             onClick={() => handleQuitarItem(pedidoActivo.id, det.id)}
-                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.8rem' }}
+                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
                           >
-                            Quitar
+                            Eliminar
                           </button>
                         )}
                       </div>
@@ -306,62 +471,130 @@ function ClienteContent() {
                   })}
                 </div>
 
-                {/* Agregar nuevos productos a la comanda actual */}
+                {/* Si el cliente tiene productos en el carrito y un pedido activo, los puede acoplar */}
                 {Object.keys(cart).length > 0 && (
-                  <div style={{ marginTop: '1rem', borderTop: '1px dotted var(--text-primary)', paddingTop: '0.5rem' }}>
-                    <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>¿Agregar estos productos adicionales al pedido actual?</p>
+                  <div style={{
+                    marginTop: '1rem',
+                    borderTop: '1px dashed var(--text-primary)',
+                    paddingTop: '0.75rem',
+                    backgroundColor: 'var(--bg-secondary)',
+                    padding: '0.65rem',
+                    borderRadius: 'var(--border-radius-md)'
+                  }}>
+                    <strong style={{ fontSize: '0.8rem', display: 'block', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                      ➕ Añadir productos a este pedido:
+                    </strong>
                     {Object.entries(cart).map(([prodId, qty]) => (
-                      <div key={prodId} className="flex-between" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      <div key={prodId} className="flex-between" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                         <span>{getNombreProducto(prodId)} x {qty}</span>
+                        <strong>${(getPrecioProducto(prodId) * qty).toLocaleString('es-AR')}</strong>
                       </div>
                     ))}
-                    <button className="btn btn-primary" onClick={() => handleAgregarMasProductos(pedidoActivo.id)} style={{ width: '100%', marginTop: '0.5rem', padding: '0.4rem' }}>
-                      Agregar al Pedido Activo
+                    
+                    <button
+                      className="btn"
+                      onClick={() => handleAgregarMasProductos(pedidoActivo.id)}
+                      style={{
+                        width: '100%',
+                        marginTop: '0.5rem',
+                        padding: '0.4rem',
+                        fontSize: '0.78rem',
+                        backgroundColor: 'var(--color-primary)',
+                        color: '#FFFFFF',
+                        borderColor: 'var(--color-primary)'
+                      }}
+                    >
+                      Confirmar Adición
                     </button>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="card" style={{ borderStyle: 'dashed', textAlign: 'center', padding: '2rem' }}>
-                <h3 className="card-title">Sin pedidos activos</h3>
-                <p className="card-desc">No has realizado ningún pedido en esta sesión aún o ya fueron entregados. Agrega productos de la carta para comenzar.</p>
-                <button className="btn btn-primary" onClick={() => setCurrentView('menu')} style={{ marginTop: '1rem' }}>
+              <div className="card" style={{ borderStyle: 'dashed', textAlign: 'center', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <h3 className="card-title" style={{ fontSize: '1rem' }}>Sin pedidos activos</h3>
+                <p className="card-desc" style={{ fontSize: '0.8rem' }}>
+                  No tienes pedidos pendientes de entrega en este momento. ¡Añade platos de nuestra carta para comenzar tu experiencia!
+                </p>
+                <button
+                  className="btn"
+                  onClick={() => setCurrentView('menu')}
+                  style={{
+                    alignSelf: 'center',
+                    backgroundColor: 'var(--color-primary)',
+                    color: '#FFFFFF',
+                    borderColor: 'var(--color-primary)',
+                    fontSize: '0.8rem',
+                    padding: '0.4rem 1.2rem'
+                  }}
+                >
                   Ver la Carta
                 </button>
               </div>
             )}
 
-            {/* Historial de Pedidos Entregados (Por si quieren revisar o si ya recibieron su comida y quieren pedir una nueva ronda) */}
+            {/* Historial de pedidos ya entregados/pagados */}
             {historialPedidos.length > 0 && (
-              <div>
-                <h3 style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Pedidos Entregados</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>🛍️ Consumo Servido</h3>
                 {historialPedidos.map((hp) => (
-                  <div key={hp.id} className="card" style={{ opacity: 0.8, marginBottom: '0.5rem' }}>
-                    <div className="flex-between">
-                      <span style={{ fontSize: '0.85rem' }}>Pedido {hp.id} (Entregado)</span>
-                      <span>{hp.detalles.reduce((acc, d) => acc + d.cantidad, 0)} ítems</span>
+                  <div key={hp.id} className="card" style={{ opacity: 0.75, padding: '0.65rem' }}>
+                    <div className="flex-between" style={{ fontSize: '0.8rem' }}>
+                      <strong>Pedido #{hp.id.substring(4)} (Entregado)</strong>
+                      <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>✓ Servido</span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      {hp.detalles.map(d => `${d.producto?.nombre} x${d.cantidad}`).join(', ')}
                     </div>
                   </div>
                 ))}
               </div>
             )}
+
           </div>
         )}
       </div>
 
-      {/* Barra de Carrito Flotante (Solo visible en la pestaña Menú si hay productos) */}
+      {/* Barra de Carrito Flotante Inferior (Solo visible en Menú si hay productos) */}
       {currentView === 'menu' && Object.keys(cart).length > 0 && (
-        <div className="float-cart-btn card flex-between" style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-primary)' }}>
-          <div>
-            <div><strong>Carrito ({Object.values(cart).reduce((a, b) => a + b, 0)} productos)</strong></div>
-            <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Total: ${totalCart}</div>
+        <div
+          className="float-cart-btn card flex-between"
+          style={{
+            backgroundColor: 'var(--text-primary)',
+            color: '#FFFFFF',
+            padding: '0.85rem 1rem',
+            borderRadius: 'var(--border-radius-md)',
+            border: 'none'
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+              Carrito ({Object.values(cart).reduce((a, b) => a + b, 0)} items)
+            </div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+              Total: ${totalCart.toLocaleString('es-AR')}
+            </div>
           </div>
+          
           <div className="flex-gap-sm">
-            <button className="btn btn-secondary" onClick={() => setCart({})} style={{ padding: '0.4rem 0.8rem', color: 'white', borderColor: 'rgba(255,255,255,0.3)' }}>
-              Limpiar
+            <button
+              className="btn btn-secondary"
+              onClick={() => setCart({})}
+              style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem', color: '#FFFFFF', borderColor: 'rgba(255,255,255,0.25)', backgroundColor: 'transparent' }}
+            >
+              Vaciar
             </button>
-            <button className="btn btn-primary" onClick={enviarPedido} style={{ padding: '0.4rem 0.8rem', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-              Enviar Pedido
+            <button
+              className="btn"
+              onClick={enviarPedido}
+              style={{
+                padding: '0.4rem 0.8rem',
+                fontSize: '0.75rem',
+                backgroundColor: 'var(--color-primary)',
+                color: '#FFFFFF',
+                borderColor: 'var(--color-primary)'
+              }}
+            >
+              Pedir
             </button>
           </div>
         </div>

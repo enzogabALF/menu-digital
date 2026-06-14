@@ -7,6 +7,10 @@ const DEFAULT_MESAS: Mesa[] = [
   { id: 'mesa-3', numero: 3, estado: 'INACTIVE', mesaPadreId: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   { id: 'mesa-4', numero: 4, estado: 'INACTIVE', mesaPadreId: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   { id: 'mesa-5', numero: 5, estado: 'INACTIVE', mesaPadreId: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'mesa-6', numero: 6, estado: 'INACTIVE', mesaPadreId: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'mesa-7', numero: 7, estado: 'INACTIVE', mesaPadreId: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'mesa-8', numero: 8, estado: 'INACTIVE', mesaPadreId: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'mesa-9', numero: 9, estado: 'INACTIVE', mesaPadreId: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 ];
 
 const DEFAULT_CATEGORIAS: Categoria[] = [

@@ -8,11 +8,23 @@ export default function CocineroPage() {
   const { db, tick } = useMenuSync();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [mesas, setMesas] = useState<Mesa[]>([]);
+  const [selectedMesaId, setSelectedMesaId] = useState<string | null>(null);
 
   useEffect(() => {
-    db.getPedidos().then(setPedidos);
-    db.getMesas().then(setMesas);
-  }, [db, tick]);
+    db.getPedidos().then((peds) => {
+      setPedidos(peds);
+    });
+    db.getMesas().then((ms) => {
+      setMesas(ms);
+      // Auto-select first active mesa if none is selected yet
+      if (ms.length > 0) {
+        const active = ms.filter(m => m.estado === 'ACTIVE');
+        if (active.length > 0 && !selectedMesaId) {
+          setSelectedMesaId(active[0]!.id);
+        }
+      }
+    });
+  }, [db, tick, selectedMesaId]);
 
   const updateEstado = async (pedidoId: string, nuevoEstado: OrderStatus) => {
     try {
@@ -36,6 +48,21 @@ export default function CocineroPage() {
     return mesas.find((m) => m.id === mesaId)?.numero || '?';
   };
 
+  const getMesaCapacidad = (numero: number) => {
+    const capacities: Record<number, string> = {
+      1: '4 p',
+      2: '2 p',
+      3: '6 p',
+      4: '4 p',
+      5: '2 p',
+      6: '4 p',
+      7: '8 p',
+      8: '2 p',
+      9: '4 p',
+    };
+    return capacities[numero] || '4 p';
+  };
+
   const getTiempoTranscurrido = (createdAt: string) => {
     const diffMs = new Date().getTime() - new Date(createdAt).getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -43,172 +70,384 @@ export default function CocineroPage() {
     return `Hace ${diffMins} min`;
   };
 
-  // Filtrar pedidos por estado
-  const pedidosEspera = pedidos.filter((p) => p.estado === 'ESPERA');
-  const pedidosProceso = pedidos.filter((p) => p.estado === 'PROCESO');
-  const pedidosRetraso = pedidos.filter((p) => p.estado === 'RETRAZO');
-  const pedidosListo = pedidos.filter((p) => p.estado === 'LISTO');
-  const pedidosEntregado = pedidos.filter((p) => p.estado === 'ENTREGADO');
+  // Obtener pedido activo para una mesa (no entregado)
+  const getActiveOrder = (mesaId: string) => {
+    return pedidos.find((p) => p.mesaId === mesaId && p.estado !== 'ENTREGADO');
+  };
 
-  // Columnas Kanban
-  const columnas: { title: string; estado: OrderStatus; lista: Pedido[]; borderClass: string }[] = [
-    { title: '⏳ En Espera', estado: 'ESPERA', lista: pedidosEspera, borderClass: 'border-espera' },
-    { title: '🍳 En Proceso', estado: 'PROCESO', lista: pedidosProceso, borderClass: 'border-proceso' },
-    { title: '⚠️ Con Retraso', estado: 'RETRAZO', lista: pedidosRetraso, borderClass: 'border-retraso' },
-    { title: '✓ Listos para Entregar', estado: 'LISTO', lista: pedidosListo, borderClass: 'border-listo' },
+  // Reportar o quitar retraso de la mesa seleccionada
+  const handleReportarRetraso = async () => {
+    if (!selectedMesaId) return;
+    const order = getActiveOrder(selectedMesaId);
+    if (!order) {
+      alert('Esta mesa no tiene un pedido activo para reportar retraso.');
+      return;
+    }
+    const nuevoEstado: OrderStatus = order.estado === 'RETRAZO' ? 'PROCESO' : 'RETRAZO';
+    await updateEstado(order.id, nuevoEstado);
+  };
+
+  // Listar mesas activas en el salón
+  const activeMesas = mesas.filter((m) => m.estado === 'ACTIVE');
+
+  // Filtrar pedidos activos (no entregados)
+  const activePedidos = pedidos.filter((p) => p.estado !== 'ENTREGADO');
+
+  // Clasificación para columnas Kanban en la parte derecha
+  const pedidosEspera = activePedidos.filter((p) => p.estado === 'ESPERA');
+  const pedidosCocinando = activePedidos.filter((p) => p.estado === 'PROCESO' || p.estado === 'RETRAZO');
+  const pedidosListo = activePedidos.filter((p) => p.estado === 'LISTO');
+
+  const columnas = [
+    { title: '⏳ En Espera', lista: pedidosEspera },
+    { title: '🍳 En Cocina', lista: pedidosCocinando },
+    { title: '✓ Listos para Servir', lista: pedidosListo },
   ];
 
+  const getHeaderStyle = (status: OrderStatus) => {
+    switch (status) {
+      case 'RETRAZO':
+        return { backgroundColor: 'var(--color-danger)', color: '#FFFFFF' };
+      case 'LISTO':
+        return { backgroundColor: 'var(--color-success)', color: '#FFFFFF' };
+      case 'PROCESO':
+        return { backgroundColor: 'var(--color-warning)', color: '#FFFFFF' };
+      case 'ESPERA':
+      default:
+        return { backgroundColor: 'var(--text-secondary)', color: '#FFFFFF' };
+    }
+  };
+
+  const selectedOrder = selectedMesaId ? getActiveOrder(selectedMesaId) : null;
+
   return (
-    <div className="desktop-wrapper">
-      <header className="app-header" style={{ position: 'static', marginBottom: '1.5rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+    <div className="desktop-wrapper" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', minHeight: '100vh' }}>
+      
+      {/* Header */}
+      <header className="app-header" style={{ position: 'static', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border-color)', padding: '1rem 1.5rem' }}>
         <div>
-          <h1 className="app-title" style={{ fontSize: '1.5rem' }}>🖥️ Monitor de Cocina</h1>
-          <p className="app-subtitle">Visualización de pedidos entrantes y estados de preparación</p>
+          <h1 className="app-title" style={{ fontSize: '1.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            🍳 Monitor de Cocina
+          </h1>
+          <p className="app-subtitle">Panel de control de pedidos en tiempo real y flujo de preparación</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <span className="badge badge-active">Cocina Online</span>
+          <span className="badge badge-success" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>🟢 Sistema Sincronizado</span>
         </div>
       </header>
 
-      {/* Grid del Kanban Board */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
-        {columnas.map((col) => (
-          <div
-            key={col.estado}
-            className="card"
-            style={{
-              minHeight: '70vh',
-              background: 'rgba(0,0,0,0.01)',
-              borderWidth: '2px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1rem',
-            }}
-          >
-            <div className="flex-between" style={{ borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-              <strong style={{ fontSize: '1.1rem' }}>{col.title}</strong>
-              <span className="badge" style={{ fontWeight: 'bold' }}>{col.lista.length}</span>
-            </div>
+      {/* Main Split Screen Area */}
+      <div style={{ display: 'flex', gap: '1.5rem', flex: 1, minHeight: '65vh' }}>
+        
+        {/* Left Column: Lista de Mesas */}
+        <aside style={{
+          width: '320px',
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: 'var(--bg-primary)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 'var(--border-radius-md)',
+          padding: '1.25rem',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.02)',
+        }}>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+            📋 Mesas Activas
+          </h2>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto', flex: 1, paddingRight: '2px' }}>
+            {activeMesas.length === 0 ? (
+              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '2rem', fontSize: '0.9rem' }}>
+                No hay mesas activas en el salón.
+              </div>
+            ) : (
+              activeMesas.map((mesa) => {
+                const activeOrder = getActiveOrder(mesa.id);
+                const isSelected = selectedMesaId === mesa.id;
+                
+                let bannerText = 'Sin Pedido 💨';
+                let bannerBg = 'var(--bg-secondary)';
+                let bannerColor = 'var(--text-secondary)';
+                
+                if (activeOrder) {
+                  if (activeOrder.estado === 'RETRAZO') {
+                    bannerText = 'Atrasado 🚨';
+                    bannerBg = 'var(--color-danger-bg)';
+                    bannerColor = 'var(--color-danger)';
+                  } else {
+                    bannerText = 'A tiempo 🔔';
+                    bannerBg = 'rgba(46, 125, 50, 0.08)';
+                    bannerColor = 'var(--color-success)';
+                  }
+                }
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto', flex: 1 }}>
-              {col.lista.length === 0 ? (
-                <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '2rem' }}>
-                  Sin pedidos
-                </p>
-              ) : (
-                col.lista.map((pedido) => (
+                return (
                   <div
-                    key={pedido.id}
-                    className="card"
+                    key={mesa.id}
+                    onClick={() => setSelectedMesaId(mesa.id)}
                     style={{
-                      borderLeft: '4px solid var(--text-primary)',
-                      backgroundColor: 'var(--bg-primary)',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                      border: isSelected ? '2px solid var(--color-primary)' : '1px solid var(--border-color)',
+                      borderRadius: 'var(--border-radius-md)',
+                      padding: '0.85rem',
+                      cursor: 'pointer',
+                      backgroundColor: isSelected ? 'rgba(242, 106, 46, 0.04)' : 'var(--bg-primary)',
+                      transition: 'all 0.2s ease',
                     }}
                   >
-                    <div className="flex-between">
-                      <strong style={{ fontSize: '1.2rem' }}>Mesa {getMesaNumero(pedido.mesaId)}</strong>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {getTiempoTranscurrido(pedido.createdAt)}
+                    <div className="flex-between" style={{ marginBottom: '0.4rem' }}>
+                      <strong style={{ fontSize: '1.1rem' }}>Mesa {mesa.numero}</strong>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                        👤 {getMesaCapacidad(mesa.numero)}
                       </span>
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                      ID: {pedido.id}
-                    </div>
 
-                    {/* Detalle de productos */}
-                    <div style={{ borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', padding: '0.5rem 0', margin: '0.5rem 0' }}>
-                      {pedido.detalles.map((det) => (
-                        <div
-                          key={det.id}
-                          className="flex-between"
-                          style={{
-                            fontSize: '0.95rem',
-                            padding: '0.15rem 0',
-                            textDecoration: det.entregado ? 'line-through' : 'none',
-                            opacity: det.entregado ? 0.5 : 1,
-                          }}
-                        >
-                          <span>{det.producto?.nombre} x <strong>{det.cantidad}</strong></span>
-                          <input
-                            type="checkbox"
-                            checked={det.entregado}
-                            onChange={() => toggleItemEntregado(pedido.id, det.id, det.entregado)}
-                            title="Marcar ítem como entregado/listo"
-                            style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Controles de estado rápido */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.5rem' }}>
-                      {pedido.estado !== 'ESPERA' && (
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => updateEstado(pedido.id, 'ESPERA')}
-                          style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', flex: 1 }}
-                        >
-                          ⏱️ Espera
-                        </button>
-                      )}
-                      {pedido.estado !== 'PROCESO' && (
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => updateEstado(pedido.id, 'PROCESO')}
-                          style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', flex: 1 }}
-                        >
-                          🍳 Proc.
-                        </button>
-                      )}
-                      {pedido.estado !== 'RETRAZO' && (
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => updateEstado(pedido.id, 'RETRAZO')}
-                          style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', flex: 1 }}
-                        >
-                          ⚠️ Retr.
-                        </button>
-                      )}
-                      {pedido.estado !== 'LISTO' && (
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => updateEstado(pedido.id, 'LISTO')}
-                          style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', flex: 1 }}
-                        >
-                          ✓ Listo
-                        </button>
+                    <div className="flex-between">
+                      <span style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 650,
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: 'var(--border-radius-sm)',
+                        backgroundColor: bannerBg,
+                        color: bannerColor,
+                        border: `1px solid ${activeOrder ? bannerColor : 'var(--border-color)'}`
+                      }}>
+                        {bannerText}
+                      </span>
+                      {activeOrder && (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          ⏱️ {getTiempoTranscurrido(activeOrder.createdAt)}
+                        </span>
                       )}
                     </div>
-
-                    {/* Botón para archivar/entregar (solo cuando está listo) */}
-                    {pedido.estado === 'LISTO' && (
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => updateEstado(pedido.id, 'ENTREGADO')}
-                        style={{ padding: '0.3rem', fontSize: '0.8rem', marginTop: '0.5rem', width: '100%', borderColor: 'green', color: 'green', background: 'transparent' }}
-                      >
-                        Entregar a la Mesa
-                      </button>
-                    )}
                   </div>
-                ))
-              )}
-            </div>
+                );
+              })
+            )}
           </div>
-        ))}
+
+          {/* Action button at the bottom of the sidebar */}
+          <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+            <button
+              onClick={handleReportarRetraso}
+              disabled={!selectedMesaId || !selectedOrder}
+              className="btn btn-primary"
+              style={{
+                width: '100%',
+                backgroundColor: selectedOrder?.estado === 'RETRAZO' ? 'var(--color-success)' : 'var(--color-danger)',
+                borderColor: selectedOrder?.estado === 'RETRAZO' ? 'var(--color-success)' : 'var(--color-danger)',
+                color: '#FFFFFF',
+                opacity: (!selectedMesaId || !selectedOrder) ? 0.5 : 1,
+              }}
+            >
+              {selectedOrder?.estado === 'RETRAZO' ? '✅ Quitar Retraso' : '🚨 Reportar Retraso'}
+            </button>
+            {selectedMesaId && !selectedOrder && (
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'center', marginTop: '0.5rem' }}>
+                La mesa seleccionada no tiene pedidos activos.
+              </p>
+            )}
+          </div>
+        </aside>
+
+        {/* Right Area: Order Kanban Grid */}
+        <main style={{ flex: 1, display: 'flex', gap: '1rem' }}>
+          {columnas.map((col, idx) => (
+            <div
+              key={idx}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: 'var(--bg-secondary)',
+                borderRadius: 'var(--border-radius-md)',
+                border: '1px solid var(--border-color)',
+                padding: '1rem',
+                minWidth: '220px'
+              }}
+            >
+              {/* Column Title */}
+              <div className="flex-between" style={{ marginBottom: '1rem', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{col.title}</h3>
+                <span className="badge" style={{ backgroundColor: 'var(--bg-primary)', fontWeight: 'bold' }}>{col.lista.length}</span>
+              </div>
+
+              {/* Cards List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto', flex: 1 }}>
+                {col.lista.length === 0 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                    Vacío
+                  </div>
+                ) : (
+                  col.lista.map((pedido) => {
+                    const headerStyle = getHeaderStyle(pedido.estado);
+                    const isMesaSelected = selectedMesaId === pedido.mesaId;
+                    const isDelayed = pedido.estado === 'RETRAZO';
+                    
+                    return (
+                      <div
+                        key={pedido.id}
+                        className="card"
+                        style={{
+                          padding: 0,
+                          overflow: 'hidden',
+                          backgroundColor: isDelayed ? 'var(--color-danger-bg)' : 'var(--bg-primary)',
+                          border: isMesaSelected ? '2px solid var(--color-primary)' : '1px solid var(--border-color)',
+                          boxShadow: '0 4px 6px rgba(0,0,0,0.03)',
+                        }}
+                      >
+                        {/* Header colored by status */}
+                        <div style={{
+                          padding: '0.6rem 0.85rem',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          ...headerStyle
+                        }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                            Mesa {getMesaNumero(pedido.mesaId)}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>
+                            {getTiempoTranscurrido(pedido.createdAt)}
+                          </span>
+                        </div>
+
+                        {/* Items list with Checkboxes */}
+                        <div style={{ padding: '0.85rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                            {pedido.detalles.map((det) => (
+                              <label
+                                key={det.id}
+                                className="flex-between"
+                                style={{
+                                  fontSize: '0.9rem',
+                                  cursor: 'pointer',
+                                  userSelect: 'none',
+                                  textDecoration: det.entregado ? 'line-through' : 'none',
+                                  opacity: det.entregado ? 0.5 : 1,
+                                }}
+                              >
+                                <span>
+                                  {det.producto?.nombre} <strong style={{ color: 'var(--color-primary)' }}>x{det.cantidad}</strong>
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={det.entregado}
+                                  onChange={() => toggleItemEntregado(pedido.id, det.id, det.entregado)}
+                                  style={{
+                                    cursor: 'pointer',
+                                    width: '16px',
+                                    height: '16px',
+                                    accentColor: 'var(--color-primary)'
+                                  }}
+                                />
+                              </label>
+                            ))}
+                          </div>
+
+                          {/* Order Actions */}
+                          <div style={{ display: 'flex', gap: '0.4rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.65rem' }}>
+                            {pedido.estado === 'ESPERA' && (
+                              <button
+                                onClick={() => updateEstado(pedido.id, 'PROCESO')}
+                                className="btn btn-primary"
+                                style={{ flex: 1, padding: '0.4rem', fontSize: '0.75rem' }}
+                              >
+                                👨‍🍳 Cocinar
+                              </button>
+                            )}
+                            
+                            {pedido.estado === 'PROCESO' && (
+                              <>
+                                <button
+                                  onClick={() => updateEstado(pedido.id, 'RETRAZO')}
+                                  className="btn btn-secondary"
+                                  style={{ flex: 1, padding: '0.4rem', fontSize: '0.75rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                                >
+                                  🚨 Reclamar
+                                </button>
+                                <button
+                                  onClick={() => updateEstado(pedido.id, 'LISTO')}
+                                  className="btn btn-primary"
+                                  style={{ flex: 1.5, padding: '0.4rem', fontSize: '0.75rem' }}
+                                >
+                                  ✓ Listo
+                                </button>
+                              </>
+                            )}
+
+                            {pedido.estado === 'RETRAZO' && (
+                              <>
+                                <button
+                                  onClick={() => updateEstado(pedido.id, 'PROCESO')}
+                                  className="btn btn-secondary"
+                                  style={{ flex: 1, padding: '0.4rem', fontSize: '0.75rem' }}
+                                >
+                                  🍳 En Cocina
+                                </button>
+                                <button
+                                  onClick={() => updateEstado(pedido.id, 'LISTO')}
+                                  className="btn btn-primary"
+                                  style={{ flex: 1.5, padding: '0.4rem', fontSize: '0.75rem' }}
+                                >
+                                  ✓ Listo
+                                </button>
+                              </>
+                            )}
+
+                            {pedido.estado === 'LISTO' && (
+                              <button
+                                onClick={() => updateEstado(pedido.id, 'ENTREGADO')}
+                                className="btn"
+                                style={{
+                                  flex: 1,
+                                  padding: '0.4rem',
+                                  fontSize: '0.75rem',
+                                  backgroundColor: 'var(--color-success)',
+                                  color: '#FFFFFF',
+                                  borderColor: 'var(--color-success)',
+                                }}
+                              >
+                                📦 Entregar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          ))}
+        </main>
       </div>
 
       {/* Historial rápido de entregados en la parte inferior */}
-      {pedidosEntregado.length > 0 && (
-        <section className="card" style={{ marginTop: '2rem' }}>
-          <h3 className="card-title">📦 Historial Reciente (Entregados en esta sesión)</h3>
-          <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', padding: '0.5rem 0' }}>
-            {pedidosEntregado.map((p) => (
-              <div key={p.id} className="card" style={{ minWidth: '200px', padding: '0.5rem', opacity: 0.7 }}>
-                <strong>Mesa {getMesaNumero(p.mesaId)}</strong>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ID: {p.id}</span>
-                <span style={{ fontSize: '0.8rem', color: 'green', fontWeight: 'bold' }}>✓ Entregado</span>
+      {pedidos.filter((p) => p.estado === 'ENTREGADO').length > 0 && (
+        <section className="card" style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)' }}>
+          <h3 className="card-title" style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+            📦 Historial Reciente (Entregados en esta sesión)
+          </h3>
+          <div style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+            {pedidos.filter((p) => p.estado === 'ENTREGADO').map((p) => (
+              <div
+                key={p.id}
+                style={{
+                  minWidth: '180px',
+                  padding: '0.5rem 0.75rem',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--border-radius-sm)',
+                  backgroundColor: 'var(--bg-secondary)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.15rem',
+                  opacity: 0.8
+                }}
+              >
+                <div className="flex-between">
+                  <strong style={{ fontSize: '0.85rem' }}>Mesa {getMesaNumero(p.mesaId)}</strong>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--color-success)', fontWeight: 'bold' }}>✓ Entregado</span>
+                </div>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>ID: {p.id}</span>
               </div>
             ))}
           </div>

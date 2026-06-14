@@ -1,25 +1,30 @@
 :root {
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --bg-primary: #ffffff;
-  --text-primary: #111111;
-  --text-muted: #666666;
-  --border-color: #dddddd;
-  --border-focus: #111111;
-  --border-radius: 8px;
+  /* Marca y Acciones */
+  --color-primary: #F26A2E;
+  --color-primary-dark: #D85217;
+
+  /* Semánticos */
+  --color-danger: #D32F2F;
+  --color-danger-bg: #FFEBEE;
+  --color-success: #2E7D32;
+  --color-warning: #F57C00;
+
+  /* Neutros */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F4F6F8;
+  --text-primary: #212121;
+  --text-secondary: #757575;
+  --border-color: #E0E0E0;
+
+  /* Tipografía y bordes */
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --border-radius-md: 12px;
+  --border-radius-sm: 6px;
+  
   --spacing-xs: 0.25rem;
   --spacing-sm: 0.5rem;
   --spacing-md: 1rem;
   --spacing-lg: 1.5rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-primary: #121212;
-    --text-primary: #eeeeee;
-    --text-muted: #aaaaaa;
-    --border-color: #333333;
-    --border-focus: #eeeeee;
-  }
 }
 
 * {
@@ -30,7 +35,7 @@
 
 body {
   font-family: var(--font-sans);
-  background-color: var(--bg-primary);
+  background-color: var(--bg-secondary);
   color: var(--text-primary);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -41,25 +46,25 @@ body {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
-  border-left: 1px solid var(--border-color);
-  border-right: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-primary);
+  position: relative;
 }
 
 .desktop-wrapper {
   width: 100%;
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
   min-height: 100vh;
 }
 
 /* Header */
 .app-header {
   padding: var(--spacing-md);
-  border-bottom: 2px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -72,12 +77,12 @@ body {
 .app-title {
   font-size: 1.25rem;
   font-weight: 700;
-  letter-spacing: -0.025em;
+  color: var(--text-primary);
 }
 
 .app-subtitle {
-  font-size: 0.875rem;
-  color: var(--text-muted);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 /* Content Area */
@@ -89,39 +94,42 @@ body {
   gap: var(--spacing-md);
 }
 
-/* Components */
+/* Cards */
 .card {
+  background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
+  border-radius: var(--border-radius-md);
   padding: var(--spacing-md);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
+  transition: box-shadow 0.2s ease;
 }
 
 .card-title {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .card-desc {
-  font-size: 0.9rem;
-  color: var(--text-muted);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 .card-price {
   font-weight: 700;
-  font-size: 1.1rem;
-  margin-top: auto;
+  font-size: 1.05rem;
+  color: var(--color-primary);
 }
 
-/* Button UI */
+/* Buttons */
 .btn {
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
-  padding: 0.6rem 1.2rem;
-  border-radius: var(--border-radius);
+  padding: 0.65rem 1.2rem;
+  border-radius: var(--border-radius-md);
   border: 1px solid var(--border-color);
   background: transparent;
   color: var(--text-primary);
@@ -134,22 +142,39 @@ body {
 }
 
 .btn:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 .btn-primary {
-  border-color: var(--text-primary);
-  background-color: var(--text-primary);
-  color: var(--bg-primary);
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: #FFFFFF;
+}
+
+.btn-primary:hover,
+.btn-primary:active {
+  background-color: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
 }
 
 .btn-secondary {
+  background-color: var(--bg-primary);
   border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background-color: var(--bg-secondary);
 }
 
 .btn-danger {
-  border-color: #ff3b30;
-  color: #ff3b30;
+  border-color: var(--color-danger);
+  background-color: transparent;
+  color: var(--color-danger);
+}
+
+.btn-danger:hover {
+  background-color: var(--color-danger-bg);
 }
 
 .btn-disabled {
@@ -161,22 +186,30 @@ body {
 /* Status Badges */
 .badge {
   display: inline-flex;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--border-radius-sm);
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   border: 1px solid var(--border-color);
-  width: fit-content;
 }
 
-.badge-active {
-  border-color: var(--text-primary);
+.badge-success {
+  background-color: rgba(46, 125, 50, 0.1);
+  color: var(--color-success);
+  border-color: var(--color-success);
 }
 
-.badge-inactive {
-  border-color: var(--border-color);
-  opacity: 0.6;
+.badge-danger {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.badge-warning {
+  background-color: rgba(245, 124, 0, 0.1);
+  color: var(--color-warning);
+  border-color: var(--color-warning);
 }
 
 /* Flex / Grid Utilities */
@@ -221,24 +254,25 @@ body {
   background: transparent;
   border: none;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   cursor: pointer;
   border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
 }
 
 .tab-btn.active {
-  color: var(--text-primary);
-  border-bottom-color: var(--text-primary);
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
 }
 
 /* Float actions */
 .float-cart-btn {
   position: fixed;
-  bottom: var(--spacing-lg);
+  bottom: var(--spacing-md);
   left: 50%;
   transform: translateX(-50%);
-  width: calc(100% - 2 * var(--spacing-lg));
+  width: calc(100% - 2 * var(--spacing-md));
   max-width: 440px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   z-index: 100;
 }
