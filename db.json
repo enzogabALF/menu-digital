@@ -22,7 +22,8 @@
       "estado": "INACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-14T23:11:41.278Z"
+      "updatedAt": "2026-06-14T23:23:40.481Z",
+      "sesionIniciadaAt": null
     },
     {
       "id": "mesa-4",
@@ -46,7 +47,8 @@
       "estado": "INACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-14T22:55:13.657Z"
+      "updatedAt": "2026-06-14T23:23:40.481Z",
+      "sesionIniciadaAt": null
     },
     {
       "id": "mesa-7",
@@ -268,6 +270,98 @@
           "exclusiones": [
             "Pimentón dulce"
           ]
+        }
+      ]
+    },
+    {
+      "id": "ped-gtdoflh",
+      "mesaId": "mesa-3",
+      "estado": "ENTREGADO",
+      "createdAt": "2026-06-14T23:19:39.090Z",
+      "updatedAt": "2026-06-14T23:20:00.094Z",
+      "detalles": [
+        {
+          "id": "det-ped-gtdoflh-0-2ip",
+          "pedidoId": "ped-gtdoflh",
+          "productoId": "prod-bife",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:19:39.090Z",
+          "exclusiones": []
+        },
+        {
+          "id": "det-ped-gtdoflh-1-qxk",
+          "pedidoId": "ped-gtdoflh",
+          "productoId": "prod-bife",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:19:39.090Z",
+          "exclusiones": [
+            "Sal marina",
+            "Romero"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ped-qd3a2mp",
+      "mesaId": "mesa-3",
+      "estado": "ENTREGADO",
+      "createdAt": "2026-06-14T23:22:18.649Z",
+      "updatedAt": "2026-06-14T23:22:43.093Z",
+      "detalles": [
+        {
+          "id": "det-ped-qd3a2mp-0-tjg",
+          "pedidoId": "ped-qd3a2mp",
+          "productoId": "prod-noquis",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:22:18.649Z",
+          "exclusiones": []
+        },
+        {
+          "id": "det-ped-qd3a2mp-1-pyd",
+          "pedidoId": "ped-qd3a2mp",
+          "productoId": "prod-noquis",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:22:18.649Z",
+          "exclusiones": [
+            "Vino tinto",
+            "Zanahoria"
+          ]
+        },
+        {
+          "id": "det-ped-qd3a2mp-2-7ok",
+          "pedidoId": "ped-qd3a2mp",
+          "productoId": "prod-noquis",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:22:18.649Z",
+          "exclusiones": [
+            "Vino tinto"
+          ]
+        },
+        {
+          "id": "det-ped-qd3a2mp-3-l3t",
+          "pedidoId": "ped-qd3a2mp",
+          "productoId": "prod-provoleta",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:22:18.649Z",
+          "exclusiones": [
+            "Aceite de oliva",
+            "Chimichurri"
+          ]
+        },
+        {
+          "id": "det-ped-qd3a2mp-4-l09",
+          "pedidoId": "ped-qd3a2mp",
+          "productoId": "prod-gaseosa",
+          "cantidad": 3,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:22:18.649Z",
+          "exclusiones": []
         }
       ]
     }

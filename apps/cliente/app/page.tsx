@@ -44,6 +44,22 @@ function ClienteContent() {
   const [splitMode, setSplitMode] = useState<'equal' | 'consumption'>('equal');
   const [selectedConsump, setSelectedConsump] = useState<{ [itemKey: string]: number }>({});
 
+  // Resumen de pago congelado para la pantalla de éxito
+  const [paymentSummary, setPaymentSummary] = useState<{
+    totalConsumido: number;
+    tipAmount: number;
+    totalConPropina: number;
+    itemsConsolidados: { productoId: string; nombre: string; cantidad: number; precio: number; exclusiones?: string[] }[];
+    splitPeopleCount: number;
+    splitMode: 'equal' | 'consumption';
+    personalSubtotal: number;
+    personalTipAmount: number;
+    personalTotal: number;
+    paymentMethod: 'mercadopago' | 'transferencia' | 'efectivo';
+    mesaNumero: number;
+    selectedConsump: { [itemKey: string]: number };
+  } | null>(null);
+
   useEffect(() => {
     const tableId = mesaParam || mesaSelector;
     if (tableId) {
@@ -257,6 +273,22 @@ function ClienteContent() {
   const handleConfirmarPago = async () => {
     if (!mesa) return;
     try {
+      // Guardar el resumen de pago antes de alterar los estados en la base de datos
+      setPaymentSummary({
+        totalConsumido,
+        tipAmount,
+        totalConPropina,
+        itemsConsolidados: [...itemsConsolidados],
+        splitPeopleCount,
+        splitMode,
+        personalSubtotal,
+        personalTipAmount,
+        personalTotal,
+        paymentMethod,
+        mesaNumero: mesa.numero,
+        selectedConsump: { ...selectedConsump }
+      });
+
       // Marcar todos los pedidos pendientes de la mesa como ENTREGADO
       const pedidosDeLaMesa = pedidos.filter((p) => p.mesaId === mesa.id && p.estado !== 'ENTREGADO');
       for (const p of pedidosDeLaMesa) {
@@ -329,6 +361,7 @@ function ClienteContent() {
 
   const handleVolverAlInicio = () => {
     setCheckoutSuccess(false);
+    setPaymentSummary(null);
     setMesaSelector('');
     setCart({});
     setCurrentView('menu');
@@ -430,6 +463,21 @@ function ClienteContent() {
   // 3. PANTALLA DE PAGO LIMPIA (CHECKOUT VIEW)
   if (currentView === 'checkout') {
     if (checkoutSuccess) {
+      const summary = paymentSummary || {
+        totalConsumido: 0,
+        tipAmount: 0,
+        totalConPropina: 0,
+        itemsConsolidados: [],
+        splitPeopleCount: 1,
+        splitMode: 'equal' as const,
+        personalSubtotal: 0,
+        personalTipAmount: 0,
+        personalTotal: 0,
+        paymentMethod: 'mercadopago' as const,
+        mesaNumero: mesa.numero,
+        selectedConsump: {}
+      };
+
       return (
         <div className="mobile-wrapper" style={{ padding: '2rem', justifyContent: 'center', display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center' }}>
           <style dangerouslySetInnerHTML={{ __html: `
@@ -468,15 +516,15 @@ function ClienteContent() {
             <span style={{ fontSize: '3rem' }}>🎉</span>
             <h2 className="card-title" style={{ color: 'var(--color-success)', fontSize: '1.4rem' }}>¡Pago Exitoso!</h2>
             <p className="card-desc" style={{ fontSize: '0.9rem', lineHeight: 1.4 }}>
-              Tu pago para la <strong>Mesa #{mesa.numero}</strong> fue registrado con éxito por un total facturado de:
+              Tu pago para la <strong>Mesa #{summary.mesaNumero}</strong> fue registrado con éxito por un total facturado de:
             </p>
             <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--color-success)', margin: '0.5rem 0' }}>
-              ${totalConPropina.toLocaleString('es-AR')}
+              ${summary.totalConPropina.toLocaleString('es-AR')}
             </div>
             <p className="card-desc" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
-              (Consumo: ${totalConsumido.toLocaleString('es-AR')} + Propina: ${tipAmount.toLocaleString('es-AR')})
+              (Consumo: ${summary.totalConsumido.toLocaleString('es-AR')} + Propina: ${summary.tipAmount.toLocaleString('es-AR')})
             </p>
-            {splitMode === 'equal' && splitPeopleCount > 1 && (
+            {summary.splitMode === 'equal' && summary.splitPeopleCount > 1 && (
               <div style={{
                 fontSize: '0.85rem',
                 fontWeight: 700,
@@ -488,10 +536,10 @@ function ClienteContent() {
                 border: '1px solid var(--border-color)',
                 marginBottom: '0.5rem'
               }}>
-                👥 Dividido entre {splitPeopleCount} personas: ${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} c/u
+                👥 Dividido entre {summary.splitPeopleCount} personas: ${(summary.totalConPropina / summary.splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} c/u
               </div>
             )}
-            {splitMode === 'consumption' && personalSubtotal > 0 && (
+            {summary.splitMode === 'consumption' && summary.personalSubtotal > 0 && (
               <div style={{
                 fontSize: '0.85rem',
                 fontWeight: 700,
@@ -503,7 +551,7 @@ function ClienteContent() {
                 border: '1px solid var(--color-success)',
                 marginBottom: '0.5rem'
               }}>
-                👥 Tu total personal (por consumo): ${personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                👥 Tu total personal (por consumo): ${summary.personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             )}
             <p className="card-desc" style={{ fontSize: '0.85rem' }}>
@@ -535,7 +583,7 @@ function ClienteContent() {
               <h2 style={{ margin: '0 0 0.25rem 0', fontSize: '16px', fontWeight: 'bold' }}>🍽️ MENÚ DIGITAL</h2>
               <p style={{ margin: '0', fontSize: '12px' }}>RESTAURANTE & BAR</p>
               <p style={{ margin: '0.25rem 0 0 0', fontSize: '11px', color: '#555' }}>
-                Mesa #{mesa.numero} | Fecha: {new Date().toLocaleDateString('es-AR')} {new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                Mesa #{summary.mesaNumero} | Fecha: {new Date().toLocaleDateString('es-AR')} {new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
 
@@ -544,7 +592,7 @@ function ClienteContent() {
                 <span>PRODUCTO DETALLE MESA</span>
                 <span>TOTAL</span>
               </div>
-              {itemsConsolidados.map((item, idx) => (
+              {summary.itemsConsolidados.map((item, idx) => (
                 <div key={idx} style={{ marginBottom: '0.4rem', fontSize: '11px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>{item.nombre} x{item.cantidad}</span>
@@ -562,34 +610,34 @@ function ClienteContent() {
             <div style={{ borderTop: '1px dashed #000', paddingTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '11px', marginBottom: '1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Subtotal Consumo Mesa:</span>
-                <span>${totalConsumido.toLocaleString('es-AR')}</span>
+                <span>${summary.totalConsumido.toLocaleString('es-AR')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Propina Mesa ({tipPercentage === -1 ? 'Personalizada' : `${tipPercentage}%`}):</span>
-                <span>${tipAmount.toLocaleString('es-AR')}</span>
+                <span>Propina Mesa ({summary.paymentMethod === 'efectivo' ? 'Efectivo' : summary.paymentMethod}):</span>
+                <span>${summary.tipAmount.toLocaleString('es-AR')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px', borderTop: '1px solid #000', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
                 <span>TOTAL MESA:</span>
-                <span>${totalConPropina.toLocaleString('es-AR')}</span>
+                <span>${summary.totalConPropina.toLocaleString('es-AR')}</span>
               </div>
             </div>
 
-            {splitMode === 'equal' && splitPeopleCount > 1 && (
+            {summary.splitMode === 'equal' && summary.splitPeopleCount > 1 && (
               <div style={{ border: '1px solid #000', padding: '0.5rem', marginBottom: '1rem', textAlign: 'center', fontSize: '11px' }}>
                 <strong>Cuenta Dividida (Por Igual)</strong>
-                <div>Comensales: {splitPeopleCount}</div>
-                <div>Pago por persona: ${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div>Comensales: {summary.splitPeopleCount}</div>
+                <div>Pago por persona: ${(summary.totalConPropina / summary.splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               </div>
             )}
 
-            {splitMode === 'consumption' && personalSubtotal > 0 && (
+            {summary.splitMode === 'consumption' && summary.personalSubtotal > 0 && (
               <div style={{ border: '1px solid #000', padding: '0.5rem', marginBottom: '1rem', fontSize: '11px', backgroundColor: '#fcfcfc' }}>
                 <div style={{ textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid #000', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
                   TICKET INDIVIDUAL (POR CONSUMO)
                 </div>
-                {itemsConsolidados.map((item, idx) => {
+                {summary.itemsConsolidados.map((item, idx) => {
                   const key = getCartKey(item.productoId, item.exclusiones);
-                  const qty = selectedConsump[key] || 0;
+                  const qty = summary.selectedConsump[key] || 0;
                   if (qty === 0) return null;
                   return (
                     <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
@@ -601,22 +649,22 @@ function ClienteContent() {
                 <div style={{ borderTop: '1px dashed #000', paddingTop: '0.25rem', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Subtotal Personal:</span>
-                    <span>${personalSubtotal.toLocaleString('es-AR')}</span>
+                    <span>${summary.personalSubtotal.toLocaleString('es-AR')}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Propina Personal (Prop.):</span>
-                    <span>${personalTipAmount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span>${summary.personalTipAmount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
                     <span>Total Personal:</span>
-                    <span>${personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span>${summary.personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               </div>
             )}
 
             <div style={{ borderTop: '1px dashed #000', paddingTop: '0.5rem', textAlign: 'center', fontSize: '11px' }}>
-              <p style={{ margin: '0 0 0.25rem 0' }}><strong>Método de Pago:</strong> {paymentMethod === 'mercadopago' ? 'Mercado Pago' : paymentMethod === 'transferencia' ? 'Transferencia' : 'Efectivo'}</p>
+              <p style={{ margin: '0 0 0.25rem 0' }}><strong>Método de Pago:</strong> {summary.paymentMethod === 'mercadopago' ? 'Mercado Pago' : summary.paymentMethod === 'transferencia' ? 'Transferencia' : 'Efectivo'}</p>
               <p style={{ margin: '0', fontStyle: 'italic' }}>¡Muchas gracias por su visita!</p>
             </div>
           </div>
