@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Prisma Generate
+        run: npm run prisma:generate --workspace=@repo/database
+
+      - name: Run Lint
+        run: npm run lint
+
+      - name: Check TypeScript Types
+        run: npm run check-types
+
+      - name: Build Projects
+        run: npm run build

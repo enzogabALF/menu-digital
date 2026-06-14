@@ -1,0 +1,72 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum TableStatus {
+  INACTIVE
+  ACTIVE
+}
+
+enum OrderStatus {
+  ESPERA      // Pedido en cola / esperando preparación
+  PROCESO     // En preparación
+  RETRAZO     // Retrasado
+  LISTO       // Listo para entregar
+  ENTREGADO   // Entregado al cliente
+}
+
+model Mesa {
+  id              String      @id @default(uuid())
+  numero          Int         @unique
+  estado          TableStatus @default(INACTIVE)
+  mesaPadreId     String?     // Para combinar mesas
+  mesaPadre       Mesa?       @relation("CombinacionMesa", fields: [mesaPadreId], references: [id])
+  mesasCombinadas Mesa[]      @relation("CombinacionMesa")
+  pedidos         Pedido[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Categoria {
+  id        String     @id @default(uuid())
+  nombre    String     @unique
+  productos Producto[]
+}
+
+model Producto {
+  id          String          @id @default(uuid())
+  nombre      String
+  descripcion String?
+  precio      Decimal
+  categoriaId String
+  categoria   Categoria       @relation(fields: [categoriaId], references: [id])
+  detalles    DetallePedido[]
+  activo      Boolean         @default(true)
+}
+
+model Pedido {
+  id        String          @id @default(uuid())
+  mesaId    String
+  mesa      Mesa            @relation(fields: [mesaId], references: [id])
+  estado    OrderStatus     @default(ESPERA)
+  detalles  DetallePedido[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model DetallePedido {
+  id          String   @id @default(uuid())
+  pedidoId    String
+  pedido      Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  productoId  String
+  producto    Producto @relation(fields: [productoId], references: [id])
+  cantidad    Int
+  entregado   Boolean  @default(false) // Si es true, el cliente no puede quitarlo
+  createdAt   DateTime @default(now())
+}
