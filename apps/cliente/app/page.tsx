@@ -41,6 +41,8 @@ function ClienteContent() {
   // Estados para exclusiones y división de cuenta
   const [selectedExclusiones, setSelectedExclusiones] = useState<string[]>([]);
   const [splitPeopleCount, setSplitPeopleCount] = useState<number>(1);
+  const [splitMode, setSplitMode] = useState<'equal' | 'consumption'>('equal');
+  const [selectedConsump, setSelectedConsump] = useState<{ [itemKey: string]: number }>({});
 
   useEffect(() => {
     const tableId = mesaParam || mesaSelector;
@@ -151,13 +153,16 @@ function ClienteContent() {
     return acc + getPrecioProducto(item.productoId) * item.cantidad;
   }, 0);
 
-  // Obtener el pedido actual de esta mesa (que no esté ENTREGADO)
-  const pedidoActivo = mesa ? pedidos.find((p) => p.mesaId === mesa.id && p.estado !== 'ENTREGADO') : null;
-  // Historial de pedidos entregados de esta mesa
-  const historialPedidos = mesa ? pedidos.filter((p) => p.mesaId === mesa.id && p.estado === 'ENTREGADO') : [];
+  // Obtener todos los pedidos asociados a esta mesa en esta sesión (tanto activos como entregados, filtrados por el inicio de sesión)
+  const startSession = mesa?.sesionIniciadaAt;
+  const pedidosSesion = (mesa && startSession)
+    ? pedidos.filter((p) => p.mesaId === mesa.id && p.createdAt >= startSession)
+    : (mesa ? pedidos.filter((p) => p.mesaId === mesa.id && p.estado !== 'ENTREGADO') : []);
 
-  // Obtener todos los pedidos asociados a esta mesa en esta sesión (tanto activos como entregados)
-  const pedidosSesion = mesa ? pedidos.filter((p) => p.mesaId === mesa.id) : [];
+  // Obtener el pedido actual de esta mesa (que no esté ENTREGADO) en esta sesión
+  const pedidoActivo = mesa ? pedidosSesion.find((p) => p.estado !== 'ENTREGADO') : null;
+  // Historial de pedidos entregados de esta mesa en esta sesión
+  const historialPedidos = mesa ? pedidosSesion.filter((p) => p.estado === 'ENTREGADO') : [];
 
   // Calcular total de consumos en esta sesión
   const totalConsumido = pedidosSesion.reduce((total, p) => {
@@ -235,6 +240,18 @@ function ClienteContent() {
   const tipAmount = getTipAmount();
   const totalConPropina = totalConsumido + tipAmount;
 
+  const getPersonalSubtotal = () => {
+    return itemsConsolidados.reduce((acc, item) => {
+      const key = getCartKey(item.productoId, item.exclusiones);
+      const qty = selectedConsump[key] || 0;
+      return acc + item.precio * qty;
+    }, 0);
+  };
+
+  const personalSubtotal = getPersonalSubtotal();
+  const personalTipAmount = totalConsumido > 0 ? (personalSubtotal / totalConsumido) * tipAmount : 0;
+  const personalTotal = personalSubtotal + personalTipAmount;
+
   const { menuDelDia, recomendados } = getRocolaItems();
 
   const handleConfirmarPago = async () => {
@@ -254,11 +271,70 @@ function ClienteContent() {
     }
   };
 
+  const descargarTicketPDF = async () => {
+    if (!mesa) return;
+    try {
+      const loadHtml2Pdf = () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return new Promise<any>((resolve, reject) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const win = window as any;
+          if (win.html2pdf) {
+            resolve(win.html2pdf);
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+          script.onload = () => resolve(win.html2pdf);
+          script.onerror = () => reject(new Error('No se pudo cargar la librería de PDF'));
+          document.body.appendChild(script);
+        });
+      };
+
+      const html2pdf = await loadHtml2Pdf();
+      const element = document.getElementById('print-receipt-section');
+      if (!element) {
+        alert('No se encontró el comprobante');
+        return;
+      }
+
+      const clone = element.cloneNode(true) as HTMLElement;
+      clone.style.display = 'block';
+      clone.style.position = 'absolute';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      clone.style.width = '80mm';
+      clone.style.background = '#ffffff';
+      clone.style.color = '#000000';
+      clone.style.padding = '15px';
+      clone.style.boxSizing = 'border-box';
+      
+      document.body.appendChild(clone);
+
+      const opt = {
+        margin: 5,
+        filename: `ticket-mesa-${mesa.numero}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      await html2pdf().from(clone).set(opt).save();
+      document.body.removeChild(clone);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al descargar PDF';
+      alert(msg);
+    }
+  };
+
   const handleVolverAlInicio = () => {
     setCheckoutSuccess(false);
     setMesaSelector('');
     setCart({});
     setCurrentView('menu');
+    setSplitPeopleCount(1);
+    setSplitMode('equal');
+    setSelectedConsump({});
     window.history.pushState({}, '', '/');
   };
 
@@ -400,7 +476,7 @@ function ClienteContent() {
             <p className="card-desc" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
               (Consumo: ${totalConsumido.toLocaleString('es-AR')} + Propina: ${tipAmount.toLocaleString('es-AR')})
             </p>
-            {splitPeopleCount > 1 && (
+            {splitMode === 'equal' && splitPeopleCount > 1 && (
               <div style={{
                 fontSize: '0.85rem',
                 fontWeight: 700,
@@ -415,17 +491,32 @@ function ClienteContent() {
                 👥 Dividido entre {splitPeopleCount} personas: ${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} c/u
               </div>
             )}
+            {splitMode === 'consumption' && personalSubtotal > 0 && (
+              <div style={{
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                color: 'var(--color-success)',
+                backgroundColor: 'rgba(46, 125, 50, 0.08)',
+                padding: '0.5rem',
+                borderRadius: 'var(--border-radius-sm)',
+                width: '100%',
+                border: '1px solid var(--color-success)',
+                marginBottom: '0.5rem'
+              }}>
+                👥 Tu total personal (por consumo): ${personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            )}
             <p className="card-desc" style={{ fontSize: '0.85rem' }}>
               La mesa ha sido cerrada correctamente. ¡Muchas gracias por tu visita!
             </p>
 
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
               <button
-                onClick={() => window.print()}
+                onClick={descargarTicketPDF}
                 className="btn btn-secondary"
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 'bold' }}
               >
-                🖨️ Descargar / Imprimir Ticket
+                📥 Descargar Ticket PDF
               </button>
 
               <button
@@ -450,7 +541,7 @@ function ClienteContent() {
 
             <div style={{ marginBottom: '1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderBottom: '1px solid #000', paddingBottom: '0.25rem', marginBottom: '0.25rem', fontSize: '11px' }}>
-                <span>PRODUCTO</span>
+                <span>PRODUCTO DETALLE MESA</span>
                 <span>TOTAL</span>
               </div>
               {itemsConsolidados.map((item, idx) => (
@@ -470,24 +561,57 @@ function ClienteContent() {
 
             <div style={{ borderTop: '1px dashed #000', paddingTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '11px', marginBottom: '1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Subtotal Consumo:</span>
+                <span>Subtotal Consumo Mesa:</span>
                 <span>${totalConsumido.toLocaleString('es-AR')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Propina ({tipPercentage === -1 ? 'Personalizada' : `${tipPercentage}%`}):</span>
+                <span>Propina Mesa ({tipPercentage === -1 ? 'Personalizada' : `${tipPercentage}%`}):</span>
                 <span>${tipAmount.toLocaleString('es-AR')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px', borderTop: '1px solid #000', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
-                <span>TOTAL FACTURADO:</span>
+                <span>TOTAL MESA:</span>
                 <span>${totalConPropina.toLocaleString('es-AR')}</span>
               </div>
             </div>
 
-            {splitPeopleCount > 1 && (
+            {splitMode === 'equal' && splitPeopleCount > 1 && (
               <div style={{ border: '1px solid #000', padding: '0.5rem', marginBottom: '1rem', textAlign: 'center', fontSize: '11px' }}>
-                <strong>Cuenta Dividida</strong>
+                <strong>Cuenta Dividida (Por Igual)</strong>
                 <div>Comensales: {splitPeopleCount}</div>
                 <div>Pago por persona: ${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </div>
+            )}
+
+            {splitMode === 'consumption' && personalSubtotal > 0 && (
+              <div style={{ border: '1px solid #000', padding: '0.5rem', marginBottom: '1rem', fontSize: '11px', backgroundColor: '#fcfcfc' }}>
+                <div style={{ textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid #000', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
+                  TICKET INDIVIDUAL (POR CONSUMO)
+                </div>
+                {itemsConsolidados.map((item, idx) => {
+                  const key = getCartKey(item.productoId, item.exclusiones);
+                  const qty = selectedConsump[key] || 0;
+                  if (qty === 0) return null;
+                  return (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
+                      <span>{item.nombre} x{qty}</span>
+                      <span>${(item.precio * qty).toLocaleString('es-AR')}</span>
+                    </div>
+                  );
+                })}
+                <div style={{ borderTop: '1px dashed #000', paddingTop: '0.25rem', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Subtotal Personal:</span>
+                    <span>${personalSubtotal.toLocaleString('es-AR')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Propina Personal (Prop.):</span>
+                    <span>${personalTipAmount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                    <span>Total Personal:</span>
+                    <span>${personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -688,44 +812,141 @@ function ClienteContent() {
 
         {/* Sección de División de Cuenta */}
         <section className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', backgroundColor: 'var(--bg-primary)' }}>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem' }}>
             👥 Dividir la Cuenta
           </h3>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
-            ¿Compartes la mesa? Divide el total equitativamente:
-          </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.25rem' }}>
+          
+          {/* Selector de modo de división */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
             <button
-              onClick={() => setSplitPeopleCount((prev) => Math.max(1, prev - 1))}
-              className="btn btn-secondary"
-              style={{ width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}
+              onClick={() => setSplitMode('equal')}
+              className="btn"
+              style={{
+                flex: 1,
+                padding: '0.5rem 0',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                backgroundColor: splitMode === 'equal' ? 'var(--color-primary)' : 'var(--bg-primary)',
+                color: splitMode === 'equal' ? '#FFFFFF' : 'var(--text-secondary)',
+                borderColor: splitMode === 'equal' ? 'var(--color-primary)' : 'var(--border-color)'
+              }}
             >
-              -
+              🧮 Dividir por Igual
             </button>
-            <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', minWidth: '80px', textAlign: 'center' }}>
-              {splitPeopleCount} {splitPeopleCount === 1 ? 'persona' : 'personas'}
-            </span>
             <button
-              onClick={() => setSplitPeopleCount((prev) => Math.min(20, prev + 1))}
-              className="btn btn-secondary"
-              style={{ width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}
+              onClick={() => setSplitMode('consumption')}
+              className="btn"
+              style={{
+                flex: 1,
+                padding: '0.5rem 0',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                backgroundColor: splitMode === 'consumption' ? 'var(--color-primary)' : 'var(--bg-primary)',
+                color: splitMode === 'consumption' ? '#FFFFFF' : 'var(--text-secondary)',
+                borderColor: splitMode === 'consumption' ? 'var(--color-primary)' : 'var(--border-color)'
+              }}
             >
-              +
+              🍕 Dividir por Consumo
             </button>
           </div>
-          {splitPeopleCount > 1 && (
-            <div style={{
-              marginTop: '0.5rem',
-              padding: '0.65rem 0.85rem',
-              borderRadius: 'var(--border-radius-sm)',
-              backgroundColor: 'rgba(46, 125, 50, 0.08)',
-              border: '1px solid var(--color-success)',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              color: 'var(--color-success)',
-              textAlign: 'center'
-            }}>
-              Cada uno paga: ${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+          {splitMode === 'equal' ? (
+            <>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
+                ¿Compartes la mesa? Divide el total equitativamente:
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.25rem' }}>
+                <button
+                  onClick={() => setSplitPeopleCount((prev) => Math.max(1, prev - 1))}
+                  className="btn btn-secondary"
+                  style={{ width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}
+                >
+                  -
+                </button>
+                <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', minWidth: '80px', textAlign: 'center' }}>
+                  {splitPeopleCount} {splitPeopleCount === 1 ? 'persona' : 'personas'}
+                </span>
+                <button
+                  onClick={() => setSplitPeopleCount((prev) => Math.min(20, prev + 1))}
+                  className="btn btn-secondary"
+                  style={{ width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}
+                >
+                  +
+                </button>
+              </div>
+              {splitPeopleCount > 1 && (
+                <div style={{
+                  marginTop: '0.5rem',
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: 'var(--border-radius-sm)',
+                  backgroundColor: 'rgba(46, 125, 50, 0.08)',
+                  border: '1px solid var(--color-success)',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  color: 'var(--color-success)',
+                  textAlign: 'center'
+                }}>
+                  Cada uno paga: ${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.25rem 0' }}>
+                Selecciona las cantidades que consumiste individualmente:
+              </p>
+              {itemsConsolidados.map((item, idx) => {
+                const key = getCartKey(item.productoId, item.exclusiones);
+                const selectedQty = selectedConsump[key] || 0;
+                return (
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', padding: '0.4rem 0', borderBottom: '1px solid var(--border-color)' }}>
+                    <div className="flex-between">
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {item.nombre} <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>(Total Mesa x{item.cantidad})</span>
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <button
+                          onClick={() => setSelectedConsump((prev) => ({ ...prev, [key]: Math.max(0, (prev[key] || 0) - 1) }))}
+                          className="btn btn-secondary"
+                          style={{ width: '24px', height: '24px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}
+                        >
+                          -
+                        </button>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 700, minWidth: '20px', textAlign: 'center' }}>
+                          {selectedQty}
+                        </span>
+                        <button
+                          onClick={() => setSelectedConsump((prev) => ({ ...prev, [key]: Math.min(item.cantidad, (prev[key] || 0) + 1) }))}
+                          className="btn btn-secondary"
+                          style={{ width: '24px', height: '24px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                    {item.exclusiones && item.exclusiones.length > 0 && (
+                      <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)' }}>
+                        Sin: {item.exclusiones.map(limpiarIngrediente).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {personalSubtotal > 0 && (
+                <div style={{
+                  marginTop: '0.5rem',
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: 'var(--border-radius-sm)',
+                  backgroundColor: 'rgba(46, 125, 50, 0.08)',
+                  border: '1px solid var(--color-success)',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  color: 'var(--color-success)',
+                  textAlign: 'center'
+                }}>
+                  Tu Total Personal (con propina prop.): ${personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -734,25 +955,31 @@ function ClienteContent() {
         <section className="card" style={{ padding: '1rem', marginTop: 'auto', border: '1px solid var(--color-primary)', backgroundColor: 'var(--bg-primary)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', borderBottom: '1px dashed var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
             <div className="flex-between" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              <span>Total Consumido:</span>
+              <span>Total Consumo Mesa:</span>
               <span>${totalConsumido.toLocaleString('es-AR')}</span>
             </div>
             <div className="flex-between" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              <span>Propina:</span>
+              <span>Propina Mesa:</span>
               <span style={{ color: tipAmount > 0 ? 'var(--color-success)' : 'inherit' }}>
                 ${tipAmount.toLocaleString('es-AR')}
               </span>
             </div>
-            {splitPeopleCount > 1 && (
+            {splitMode === 'equal' && splitPeopleCount > 1 && (
               <div className="flex-between" style={{ fontSize: '0.8rem', color: 'var(--color-success)', fontWeight: 650 }}>
                 <span>Por persona ({splitPeopleCount}):</span>
                 <span>${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             )}
+            {splitMode === 'consumption' && personalSubtotal > 0 && (
+              <div className="flex-between" style={{ fontSize: '0.8rem', color: 'var(--color-success)', fontWeight: 650 }}>
+                <span>Tu total personal:</span>
+                <span>${personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            )}
           </div>
           
           <div className="flex-between" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
-            <span>Total a Pagar:</span>
+            <span>Total a Pagar (Mesa):</span>
             <span style={{ color: 'var(--color-primary)' }}>
               ${totalConPropina.toLocaleString('es-AR')}
             </span>
@@ -1558,6 +1785,8 @@ function ClienteContent() {
                   setCustomTip('');
                   setCheckoutSuccess(false);
                   setSplitPeopleCount(1);
+                  setSplitMode('equal');
+                  setSelectedConsump({});
                 }}
                 style={{
                   width: '100%',

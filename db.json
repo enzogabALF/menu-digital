@@ -22,7 +22,7 @@
       "estado": "INACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-14T22:11:25.820Z"
+      "updatedAt": "2026-06-14T23:11:41.278Z"
     },
     {
       "id": "mesa-4",
@@ -227,6 +227,47 @@
           "cantidad": 3,
           "entregado": true,
           "createdAt": "2026-06-14T22:47:51.436Z"
+        }
+      ]
+    },
+    {
+      "id": "ped-ys3wnyq",
+      "mesaId": "mesa-3",
+      "estado": "ENTREGADO",
+      "createdAt": "2026-06-14T23:10:15.998Z",
+      "updatedAt": "2026-06-14T23:11:18.238Z",
+      "detalles": [
+        {
+          "id": "det-ped-ys3wnyq-0-mfv",
+          "pedidoId": "ped-ys3wnyq",
+          "productoId": "prod-empanada",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:10:15.998Z",
+          "exclusiones": []
+        },
+        {
+          "id": "det-ped-ys3wnyq-1-sr4",
+          "pedidoId": "ped-ys3wnyq",
+          "productoId": "prod-empanada",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:10:15.998Z",
+          "exclusiones": [
+            "Comino",
+            "Pimentón dulce"
+          ]
+        },
+        {
+          "id": "det-ped-ys3wnyq-2-xty",
+          "pedidoId": "ped-ys3wnyq",
+          "productoId": "prod-empanada",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:10:15.998Z",
+          "exclusiones": [
+            "Pimentón dulce"
+          ]
         }
       ]
     }

@@ -8,6 +8,7 @@ export interface Mesa {
   mesaPadreId: string | null;
   createdAt: string;
   updatedAt: string;
+  sesionIniciadaAt?: string | null;
 }
 
 export interface Categoria {

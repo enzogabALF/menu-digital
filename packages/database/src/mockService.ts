@@ -215,8 +215,15 @@ export const MockService = {
     const index = mesas.findIndex((m) => m.id === id);
     if (index === -1) throw new Error('Mesa no encontrada');
 
+    const estadoAnterior = mesas[index]!.estado;
     mesas[index]!.estado = estado;
     mesas[index]!.updatedAt = new Date().toISOString();
+
+    if (estadoAnterior === 'INACTIVE' && estado === 'ACTIVE') {
+      mesas[index]!.sesionIniciadaAt = new Date().toISOString();
+    } else if (estado === 'INACTIVE') {
+      mesas[index]!.sesionIniciadaAt = null;
+    }
 
     // Si se desactiva una mesa combinada, descombinamos
     if (estado === 'INACTIVE') {
@@ -224,6 +231,8 @@ export const MockService = {
       mesas.forEach((m) => {
         if (m.mesaPadreId === id) {
           m.mesaPadreId = null;
+          m.estado = 'INACTIVE';
+          m.sesionIniciadaAt = null;
           m.updatedAt = new Date().toISOString();
         }
       });
@@ -241,10 +250,16 @@ export const MockService = {
     if (!mesaA || !mesaB) throw new Error('Mesa(s) no encontrada(s)');
     if (mesaIdA === mesaIdB) throw new Error('No puedes combinar una mesa consigo misma');
 
+    if (mesaB.estado === 'INACTIVE') {
+      mesaB.sesionIniciadaAt = new Date().toISOString();
+    }
     mesaB.mesaPadreId = mesaIdA;
     mesaB.estado = 'ACTIVE';
     mesaB.updatedAt = new Date().toISOString();
 
+    if (mesaA.estado === 'INACTIVE') {
+      mesaA.sesionIniciadaAt = new Date().toISOString();
+    }
     mesaA.estado = 'ACTIVE';
     mesaA.updatedAt = new Date().toISOString();
 
