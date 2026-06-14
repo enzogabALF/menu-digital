@@ -34,6 +34,7 @@ export interface DetallePedido {
   entregado: boolean;
   createdAt: string;
   producto?: Producto;
+  exclusiones?: string[];
 }
 
 export interface Pedido {

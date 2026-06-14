@@ -18,8 +18,15 @@ function ClienteContent() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [categorias, setCategorias] = useState<{ id: string; nombre: string }[]>([]);
 
-  // Carrito local de compras
-  const [cart, setCart] = useState<{ [productoId: string]: number }>({});
+  // Carrito local de compras (con soporte para exclusión de ingredientes)
+  const [cart, setCart] = useState<{
+    [cartKey: string]: {
+      productoId: string;
+      cantidad: number;
+      exclusiones: string[];
+    };
+  }>({});
+
   // Vista activa: 'menu' (Carta), 'estado' (Mi Pedido) o 'checkout' (Pantalla de Pago)
   const [currentView, setCurrentView] = useState<'menu' | 'estado' | 'checkout'>('menu');
   const [activeCategory, setActiveCategory] = useState<string>('cat-entradas');
@@ -30,6 +37,10 @@ function ClienteContent() {
   const [paymentMethod, setPaymentMethod] = useState<'mercadopago' | 'transferencia' | 'efectivo'>('mercadopago');
   const [checkoutSuccess, setCheckoutSuccess] = useState<boolean>(false);
   const [selectedProductInfo, setSelectedProductInfo] = useState<Producto | null>(null);
+
+  // Estados para exclusiones y división de cuenta
+  const [selectedExclusiones, setSelectedExclusiones] = useState<string[]>([]);
+  const [splitPeopleCount, setSplitPeopleCount] = useState<number>(1);
 
   useEffect(() => {
     const tableId = mesaParam || mesaSelector;
@@ -43,15 +54,30 @@ function ClienteContent() {
     db.getCategorias().then(setCategorias);
   }, [db, tick, mesaParam, mesaSelector]);
 
-  const updateCartQty = (productoId: string, qty: number) => {
+  const getCartKey = (productoId: string, exclusiones: string[] = []) => {
+    if (exclusiones.length === 0) return productoId;
+    const sorted = [...exclusiones].sort().join(',');
+    return `${productoId}-${sorted}`;
+  };
+
+  const limpiarIngrediente = (ing: string) => {
+    return ing.replace(/\s*\(\d+g\)/g, '').replace(/\s*\(\d+ml\)/g, '');
+  };
+
+  const updateCartQty = (productoId: string, qty: number, exclusiones: string[] = []) => {
+    const key = getCartKey(productoId, exclusiones);
     setCart((prev) => {
       const copy = { ...prev };
-      const current = copy[productoId] || 0;
-      const next = current + qty;
-      if (next <= 0) {
-        delete copy[productoId];
+      const current = copy[key] || { productoId, cantidad: 0, exclusiones };
+      const nextQty = current.cantidad + qty;
+      if (nextQty <= 0) {
+        delete copy[key];
       } else {
-        copy[productoId] = next;
+        copy[key] = {
+          productoId,
+          cantidad: nextQty,
+          exclusiones
+        };
       }
       return copy;
     });
@@ -59,9 +85,10 @@ function ClienteContent() {
 
   const enviarPedido = async () => {
     if (!mesa) return;
-    const items = Object.entries(cart).map(([productoId, cantidad]) => ({
-      productoId,
-      cantidad,
+    const items = Object.values(cart).map((item) => ({
+      productoId: item.productoId,
+      cantidad: item.cantidad,
+      exclusiones: item.exclusiones,
     }));
 
     if (items.length === 0) {
@@ -91,9 +118,10 @@ function ClienteContent() {
   };
 
   const handleAgregarMasProductos = async (pedidoId: string) => {
-    const items = Object.entries(cart).map(([productoId, cantidad]) => ({
-      productoId,
-      cantidad,
+    const items = Object.values(cart).map((item) => ({
+      productoId: item.productoId,
+      cantidad: item.cantidad,
+      exclusiones: item.exclusiones,
     }));
 
     if (items.length === 0) {
@@ -119,8 +147,8 @@ function ClienteContent() {
     return productos.find((p) => p.id === id)?.precio || 0;
   };
 
-  const totalCart = Object.entries(cart).reduce((acc, [prodId, qty]) => {
-    return acc + getPrecioProducto(prodId) * qty;
+  const totalCart = Object.values(cart).reduce((acc, item) => {
+    return acc + getPrecioProducto(item.productoId) * item.cantidad;
   }, 0);
 
   // Obtener el pedido actual de esta mesa (que no esté ENTREGADO)
@@ -139,12 +167,19 @@ function ClienteContent() {
     }, 0);
   }, 0);
 
+  const sonIgualesExclusiones = (a?: string[], b?: string[]) => {
+    const arrA = a || [];
+    const arrB = b || [];
+    if (arrA.length !== arrB.length) return false;
+    return arrA.every(x => arrB.includes(x)) && arrB.every(x => arrA.includes(x));
+  };
+
   // Obtener lista consolidada de productos consumidos para mostrar en la factura
-  const itemsConsolidados: { productoId: string; nombre: string; cantidad: number; precio: number }[] = [];
+  const itemsConsolidados: { productoId: string; nombre: string; cantidad: number; precio: number; exclusiones?: string[] }[] = [];
   
   pedidosSesion.forEach((p) => {
     p.detalles.forEach((d) => {
-      const existente = itemsConsolidados.find((x) => x.productoId === d.productoId);
+      const existente = itemsConsolidados.find((x) => x.productoId === d.productoId && sonIgualesExclusiones(x.exclusiones, d.exclusiones));
       const precio = getPrecioProducto(d.productoId);
       const nombre = getNombreProducto(d.productoId);
       if (existente) {
@@ -155,6 +190,7 @@ function ClienteContent() {
           nombre,
           cantidad: d.cantidad,
           precio,
+          exclusiones: d.exclusiones,
         });
       }
     });
@@ -320,6 +356,38 @@ function ClienteContent() {
     if (checkoutSuccess) {
       return (
         <div className="mobile-wrapper" style={{ padding: '2rem', justifyContent: 'center', display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center' }}>
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media screen {
+              #print-receipt-section {
+                display: none !important;
+              }
+            }
+            @media print {
+              html, body {
+                background: #fff !important;
+                color: #000 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              body * {
+                visibility: hidden !important;
+              }
+              #print-receipt-section, #print-receipt-section * {
+                visibility: visible !important;
+              }
+              #print-receipt-section {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 20px !important;
+                box-sizing: border-box !important;
+              }
+            }
+          `}} />
+
           <div className="card" style={{ padding: '2rem', border: '2px solid var(--color-success)', boxShadow: '0 8px 30px rgba(46, 125, 50, 0.08)', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
             <span style={{ fontSize: '3rem' }}>🎉</span>
             <h2 className="card-title" style={{ color: 'var(--color-success)', fontSize: '1.4rem' }}>¡Pago Exitoso!</h2>
@@ -332,16 +400,101 @@ function ClienteContent() {
             <p className="card-desc" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
               (Consumo: ${totalConsumido.toLocaleString('es-AR')} + Propina: ${tipAmount.toLocaleString('es-AR')})
             </p>
+            {splitPeopleCount > 1 && (
+              <div style={{
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                color: 'var(--text-secondary)',
+                backgroundColor: 'rgba(0,0,0,0.02)',
+                padding: '0.5rem',
+                borderRadius: 'var(--border-radius-sm)',
+                width: '100%',
+                border: '1px solid var(--border-color)',
+                marginBottom: '0.5rem'
+              }}>
+                👥 Dividido entre {splitPeopleCount} personas: ${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} c/u
+              </div>
+            )}
             <p className="card-desc" style={{ fontSize: '0.85rem' }}>
               La mesa ha sido cerrada correctamente. ¡Muchas gracias por tu visita!
             </p>
-            <button
-              onClick={handleVolverAlInicio}
-              className="btn btn-primary"
-              style={{ width: '100%', marginTop: '1rem', backgroundColor: 'var(--color-primary)', borderColor: 'var(--color-primary)' }}
-            >
-              Volver al Inicio
-            </button>
+
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
+              <button
+                onClick={() => window.print()}
+                className="btn btn-secondary"
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 'bold' }}
+              >
+                🖨️ Descargar / Imprimir Ticket
+              </button>
+
+              <button
+                onClick={handleVolverAlInicio}
+                className="btn btn-primary"
+                style={{ width: '100%', backgroundColor: 'var(--color-primary)', borderColor: 'var(--color-primary)' }}
+              >
+                Volver al Inicio
+              </button>
+            </div>
+          </div>
+
+          {/* Recibo impreso oculto en pantalla */}
+          <div id="print-receipt-section" style={{ display: 'none', fontFamily: 'monospace', color: '#000', textAlign: 'left' }}>
+            <div style={{ textAlign: 'center', marginBottom: '1rem', borderBottom: '1px dashed #000', paddingBottom: '0.5rem' }}>
+              <h2 style={{ margin: '0 0 0.25rem 0', fontSize: '16px', fontWeight: 'bold' }}>🍽️ MENÚ DIGITAL</h2>
+              <p style={{ margin: '0', fontSize: '12px' }}>RESTAURANTE & BAR</p>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '11px', color: '#555' }}>
+                Mesa #{mesa.numero} | Fecha: {new Date().toLocaleDateString('es-AR')} {new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderBottom: '1px solid #000', paddingBottom: '0.25rem', marginBottom: '0.25rem', fontSize: '11px' }}>
+                <span>PRODUCTO</span>
+                <span>TOTAL</span>
+              </div>
+              {itemsConsolidados.map((item, idx) => (
+                <div key={idx} style={{ marginBottom: '0.4rem', fontSize: '11px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{item.nombre} x{item.cantidad}</span>
+                    <span>${(item.precio * item.cantidad).toLocaleString('es-AR')}</span>
+                  </div>
+                  {item.exclusiones && item.exclusiones.length > 0 && (
+                    <div style={{ fontSize: '10px', fontStyle: 'italic', paddingLeft: '0.5rem', color: '#333' }}>
+                      * Sin: {item.exclusiones.map(limpiarIngrediente).join(', ')}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ borderTop: '1px dashed #000', paddingTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '11px', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Subtotal Consumo:</span>
+                <span>${totalConsumido.toLocaleString('es-AR')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Propina ({tipPercentage === -1 ? 'Personalizada' : `${tipPercentage}%`}):</span>
+                <span>${tipAmount.toLocaleString('es-AR')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px', borderTop: '1px solid #000', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
+                <span>TOTAL FACTURADO:</span>
+                <span>${totalConPropina.toLocaleString('es-AR')}</span>
+              </div>
+            </div>
+
+            {splitPeopleCount > 1 && (
+              <div style={{ border: '1px solid #000', padding: '0.5rem', marginBottom: '1rem', textAlign: 'center', fontSize: '11px' }}>
+                <strong>Cuenta Dividida</strong>
+                <div>Comensales: {splitPeopleCount}</div>
+                <div>Pago por persona: ${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </div>
+            )}
+
+            <div style={{ borderTop: '1px dashed #000', paddingTop: '0.5rem', textAlign: 'center', fontSize: '11px' }}>
+              <p style={{ margin: '0 0 0.25rem 0' }}><strong>Método de Pago:</strong> {paymentMethod === 'mercadopago' ? 'Mercado Pago' : paymentMethod === 'transferencia' ? 'Transferencia' : 'Efectivo'}</p>
+              <p style={{ margin: '0', fontStyle: 'italic' }}>¡Muchas gracias por su visita!</p>
+            </div>
           </div>
         </div>
       );
@@ -379,10 +532,17 @@ function ClienteContent() {
           </h3>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto', paddingRight: '2px' }}>
-            {itemsConsolidados.map((item) => (
-              <div key={item.productoId} className="flex-between" style={{ fontSize: '0.85rem' }}>
-                <span>{item.nombre} <strong style={{ color: 'var(--color-primary)' }}>x{item.cantidad}</strong></span>
-                <strong>${(item.precio * item.cantidad).toLocaleString('es-AR')}</strong>
+            {itemsConsolidados.map((item, idx) => (
+              <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                <div className="flex-between" style={{ fontSize: '0.85rem' }}>
+                  <span>{item.nombre} <strong style={{ color: 'var(--color-primary)' }}>x{item.cantidad}</strong></span>
+                  <strong>${(item.precio * item.cantidad).toLocaleString('es-AR')}</strong>
+                </div>
+                {item.exclusiones && item.exclusiones.length > 0 && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-danger)', fontWeight: 600, paddingLeft: '0.5rem' }}>
+                    ❌ Sin: {item.exclusiones.map(limpiarIngrediente).join(', ')}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -526,6 +686,50 @@ function ClienteContent() {
           </div>
         </section>
 
+        {/* Sección de División de Cuenta */}
+        <section className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', backgroundColor: 'var(--bg-primary)' }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            👥 Dividir la Cuenta
+          </h3>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
+            ¿Compartes la mesa? Divide el total equitativamente:
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.25rem' }}>
+            <button
+              onClick={() => setSplitPeopleCount((prev) => Math.max(1, prev - 1))}
+              className="btn btn-secondary"
+              style={{ width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}
+            >
+              -
+            </button>
+            <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', minWidth: '80px', textAlign: 'center' }}>
+              {splitPeopleCount} {splitPeopleCount === 1 ? 'persona' : 'personas'}
+            </span>
+            <button
+              onClick={() => setSplitPeopleCount((prev) => Math.min(20, prev + 1))}
+              className="btn btn-secondary"
+              style={{ width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}
+            >
+              +
+            </button>
+          </div>
+          {splitPeopleCount > 1 && (
+            <div style={{
+              marginTop: '0.5rem',
+              padding: '0.65rem 0.85rem',
+              borderRadius: 'var(--border-radius-sm)',
+              backgroundColor: 'rgba(46, 125, 50, 0.08)',
+              border: '1px solid var(--color-success)',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              color: 'var(--color-success)',
+              textAlign: 'center'
+            }}>
+              Cada uno paga: ${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          )}
+        </section>
+
         {/* Factura final y Confirmación */}
         <section className="card" style={{ padding: '1rem', marginTop: 'auto', border: '1px solid var(--color-primary)', backgroundColor: 'var(--bg-primary)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', borderBottom: '1px dashed var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
@@ -539,6 +743,12 @@ function ClienteContent() {
                 ${tipAmount.toLocaleString('es-AR')}
               </span>
             </div>
+            {splitPeopleCount > 1 && (
+              <div className="flex-between" style={{ fontSize: '0.8rem', color: 'var(--color-success)', fontWeight: 650 }}>
+                <span>Por persona ({splitPeopleCount}):</span>
+                <span>${(totalConPropina / splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            )}
           </div>
           
           <div className="flex-between" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
@@ -570,10 +780,6 @@ function ClienteContent() {
 
   // 3b. PANTALLA DETALLE DE PRODUCTO (INGREDIENTES)
   if (selectedProductInfo) {
-    const limpiarIngrediente = (ing: string) => {
-      return ing.replace(/\s*\(\d+g\)/g, '').replace(/\s*\(\d+ml\)/g, '');
-    };
-
     return (
       <div className="mobile-wrapper" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', minHeight: '100vh', backgroundColor: 'var(--bg-secondary)' }}>
         
@@ -632,47 +838,98 @@ function ClienteContent() {
             )}
 
             <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '0.5rem' }}>
-              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                📋 Ingredientes
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                📋 Personalizar Ingredientes
               </h3>
               
-              <ul style={{ 
-                margin: 0, 
-                paddingLeft: '1.2rem', 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '0.5rem',
-                fontSize: '0.85rem',
-                color: 'var(--text-secondary)',
-                lineHeight: 1.4
-              }}>
-                {selectedProductInfo.ingredientes?.map((ing, index) => (
-                  <li key={index} style={{ listStyleType: 'disc' }}>
-                    {limpiarIngrediente(ing)}
-                  </li>
-                ))}
-              </ul>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '0.25rem' }}>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', margin: '0 0 0.25rem 0', fontStyle: 'italic' }}>
+                  * Desmarque los ingredientes que desee excluir del plato:
+                </p>
+                {selectedProductInfo.ingredientes?.map((ing, index) => {
+                  const isExcluded = selectedExclusiones.includes(ing);
+                  return (
+                    <label
+                      key={index}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.55rem',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        userSelect: 'none'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!isExcluded}
+                        onChange={() => {
+                          if (isExcluded) {
+                            setSelectedExclusiones((prev) => prev.filter((x) => x !== ing));
+                          } else {
+                            setSelectedExclusiones((prev) => [...prev, ing]);
+                          }
+                        }}
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          accentColor: 'var(--color-primary)'
+                        }}
+                      />
+                      <span style={{
+                        color: isExcluded ? 'var(--text-secondary)' : 'var(--text-primary)',
+                        textDecoration: isExcluded ? 'line-through' : 'none',
+                        fontWeight: isExcluded ? 500 : 600
+                      }}>
+                        {limpiarIngrediente(ing)}
+                        {isExcluded && (
+                          <span style={{ marginLeft: '0.35rem', fontSize: '0.72rem', color: 'var(--color-danger)', fontWeight: 700 }}>
+                            (Excluido ❌)
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Botón Volver Rápido al final */}
-        <button
-          onClick={() => setSelectedProductInfo(null)}
-          className="btn"
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            fontSize: '0.95rem',
-            fontWeight: 700,
-            backgroundColor: 'var(--color-primary)',
-            borderColor: 'var(--color-primary)',
-            color: '#FFFFFF',
-            marginTop: 'auto'
-          }}
-        >
-          Volver a la Carta
-        </button>
+        {/* Botones de acción al final */}
+        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <button
+            onClick={() => {
+              updateCartQty(selectedProductInfo.id, 1, selectedExclusiones);
+              setSelectedProductInfo(null);
+              alert('¡Plato personalizado agregado al carrito!');
+            }}
+            className="btn"
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              fontSize: '0.95rem',
+              fontWeight: 700,
+              backgroundColor: 'var(--color-primary)',
+              borderColor: 'var(--color-primary)',
+              color: '#FFFFFF'
+            }}
+          >
+            🛒 Agregar al Pedido
+          </button>
+          
+          <button
+            onClick={() => setSelectedProductInfo(null)}
+            className="btn btn-secondary"
+            style={{
+              width: '100%',
+              padding: '0.5rem',
+              fontSize: '0.85rem'
+            }}
+          >
+            Volver a la Carta
+          </button>
+        </div>
       </div>
     );
   }
@@ -834,7 +1091,7 @@ function ClienteContent() {
                           <h4 style={{ fontSize: '0.88rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                             {menuDelDia.nombre}
                             <button
-                              onClick={() => setSelectedProductInfo(menuDelDia)}
+                              onClick={() => { setSelectedProductInfo(menuDelDia); setSelectedExclusiones([]); }}
                               style={{
                                 width: '16px',
                                 height: '16px',
@@ -935,7 +1192,7 @@ function ClienteContent() {
                           <h4 style={{ fontSize: '0.88rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                             {prod.nombre}
                             <button
-                              onClick={() => setSelectedProductInfo(prod)}
+                              onClick={() => { setSelectedProductInfo(prod); setSelectedExclusiones([]); }}
                               style={{
                                 width: '16px',
                                 height: '16px',
@@ -1018,7 +1275,7 @@ function ClienteContent() {
               {productos
                 .filter((p) => p.categoriaId === activeCategory && p.activo)
                 .map((prod) => {
-                  const qty = cart[prod.id] || 0;
+                  const qty = cart[prod.id]?.cantidad || 0;
                   return (
                     <div
                       key={prod.id}
@@ -1056,7 +1313,7 @@ function ClienteContent() {
                               {prod.nombre}
                               {prod.ingredientes && prod.ingredientes.length > 0 && (
                                 <button
-                                  onClick={() => setSelectedProductInfo(prod)}
+                                  onClick={() => { setSelectedProductInfo(prod); setSelectedExclusiones([]); }}
                                   style={{
                                     width: '18px',
                                     height: '18px',
@@ -1181,7 +1438,12 @@ function ClienteContent() {
                           <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
                             {det.producto?.nombre} <strong style={{ color: 'var(--color-primary)' }}>x{det.cantidad}</strong>
                           </span>
-                          <div style={{ fontSize: '0.7rem', color: det.entregado ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: 500 }}>
+                          {det.exclusiones && det.exclusiones.length > 0 && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-danger)', fontWeight: 600, marginTop: '0.1rem' }}>
+                              ❌ Sin: {det.exclusiones.map(limpiarIngrediente).join(', ')}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.7rem', color: det.entregado ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: 500, marginTop: '0.15rem' }}>
                             {det.entregado ? '✓ Servido en Mesa' : '⏳ En preparación...'}
                           </div>
                         </div>
@@ -1213,10 +1475,17 @@ function ClienteContent() {
                     <strong style={{ fontSize: '0.8rem', display: 'block', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
                       ➕ Añadir productos a este pedido:
                     </strong>
-                    {Object.entries(cart).map(([prodId, qty]) => (
-                      <div key={prodId} className="flex-between" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        <span>{getNombreProducto(prodId)} x {qty}</span>
-                        <strong>${(getPrecioProducto(prodId) * qty).toLocaleString('es-AR')}</strong>
+                    {Object.values(cart).map((item, idx) => (
+                      <div key={idx} style={{ padding: '0.15rem 0' }}>
+                        <div className="flex-between" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          <span>{getNombreProducto(item.productoId)} x {item.cantidad}</span>
+                          <strong>${(getPrecioProducto(item.productoId) * item.cantidad).toLocaleString('es-AR')}</strong>
+                        </div>
+                        {item.exclusiones && item.exclusiones.length > 0 && (
+                          <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)', marginLeft: '10px' }}>
+                            Sin: {item.exclusiones.map(limpiarIngrediente).join(', ')}
+                          </div>
+                        )}
                       </div>
                     ))}
                     
@@ -1288,6 +1557,7 @@ function ClienteContent() {
                   setTipPercentage(10);
                   setCustomTip('');
                   setCheckoutSuccess(false);
+                  setSplitPeopleCount(1);
                 }}
                 style={{
                   width: '100%',
@@ -1324,7 +1594,7 @@ function ClienteContent() {
         >
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>
-              Carrito ({Object.values(cart).reduce((a, b) => a + b, 0)} items)
+              Carrito ({Object.values(cart).reduce((a, b) => a + b.cantidad, 0)} items)
             </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-primary)' }}>
               Total: ${totalCart.toLocaleString('es-AR')}

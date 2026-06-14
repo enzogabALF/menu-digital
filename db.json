@@ -46,7 +46,7 @@
       "estado": "INACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-14T22:06:57.574Z"
+      "updatedAt": "2026-06-14T22:55:13.657Z"
     },
     {
       "id": "mesa-7",
@@ -170,6 +170,63 @@
           "cantidad": 3,
           "entregado": true,
           "createdAt": "2026-06-14T22:09:42.669Z"
+        }
+      ]
+    },
+    {
+      "id": "ped-utgknmt",
+      "mesaId": "mesa-6",
+      "estado": "ENTREGADO",
+      "createdAt": "2026-06-14T22:47:25.452Z",
+      "updatedAt": "2026-06-14T22:55:13.589Z",
+      "detalles": [
+        {
+          "id": "det-ped-utgknmt-0-1w3",
+          "pedidoId": "ped-utgknmt",
+          "productoId": "prod-empanada",
+          "cantidad": 3,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:47:25.452Z"
+        },
+        {
+          "id": "det-ped-utgknmt-3n81n77",
+          "pedidoId": "ped-utgknmt",
+          "productoId": "prod-bife",
+          "cantidad": 3,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:47:39.556Z"
+        },
+        {
+          "id": "det-ped-utgknmt-3xdf23i",
+          "pedidoId": "ped-utgknmt",
+          "productoId": "prod-milanesa",
+          "cantidad": 2,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:47:39.556Z"
+        },
+        {
+          "id": "det-ped-utgknmt-2vbuoan",
+          "pedidoId": "ped-utgknmt",
+          "productoId": "prod-noquis",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:47:39.556Z"
+        },
+        {
+          "id": "det-ped-utgknmt-3g6ec7h",
+          "pedidoId": "ped-utgknmt",
+          "productoId": "prod-cerveza",
+          "cantidad": 3,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:47:51.436Z"
+        },
+        {
+          "id": "det-ped-utgknmt-jh271k3",
+          "pedidoId": "ped-utgknmt",
+          "productoId": "prod-gaseosa",
+          "cantidad": 3,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:47:51.436Z"
         }
       ]
     }

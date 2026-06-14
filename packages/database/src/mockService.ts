@@ -305,7 +305,7 @@ export const MockService = {
     return pedidos.filter((p) => grupoMesasIds.includes(p.mesaId));
   },
 
-  async crearPedido(mesaId: string, items: { productoId: string; cantidad: number }[]): Promise<Pedido> {
+  async crearPedido(mesaId: string, items: { productoId: string; cantidad: number; exclusiones?: string[] }[]): Promise<Pedido> {
     const mesas = await this.getMesas();
     const mesa = mesas.find((m) => m.id === mesaId);
     if (!mesa) throw new Error('Mesa no encontrada');
@@ -336,6 +336,7 @@ export const MockService = {
         cantidad: item.cantidad,
         entregado: false,
         createdAt: new Date().toISOString(),
+        exclusiones: item.exclusiones,
       })),
     };
 
@@ -346,7 +347,7 @@ export const MockService = {
     return allPeds.find((p) => p.id === nuevoPedidoId)!;
   },
 
-  async agregarProductosAPedido(pedidoId: string, items: { productoId: string; cantidad: number }[]): Promise<Pedido> {
+  async agregarProductosAPedido(pedidoId: string, items: { productoId: string; cantidad: number; exclusiones?: string[] }[]): Promise<Pedido> {
     const pedidos = await getStorageItem<Pedido[]>('md_pedidos', []);
     const index = pedidos.findIndex((p) => p.id === pedidoId);
     if (index === -1) throw new Error('Pedido no encontrado');
@@ -356,9 +357,16 @@ export const MockService = {
       throw new Error('El pedido ya ha sido entregado');
     }
 
+    const sonIgualesExclusiones = (a?: string[], b?: string[]) => {
+      const arrA = a || [];
+      const arrB = b || [];
+      if (arrA.length !== arrB.length) return false;
+      return arrA.every(x => arrB.includes(x)) && arrB.every(x => arrA.includes(x));
+    };
+
     items.forEach((item) => {
       const detalleExistente = pedido.detalles.find(
-        (d) => d.productoId === item.productoId && !d.entregado
+        (d) => d.productoId === item.productoId && !d.entregado && sonIgualesExclusiones(d.exclusiones, item.exclusiones)
       );
 
       if (detalleExistente) {
@@ -371,6 +379,7 @@ export const MockService = {
           cantidad: item.cantidad,
           entregado: false,
           createdAt: new Date().toISOString(),
+          exclusiones: item.exclusiones,
         });
       }
     });
