@@ -20,8 +20,8 @@ function ClienteContent() {
 
   // Carrito local de compras
   const [cart, setCart] = useState<{ [productoId: string]: number }>({});
-  // Vista activa: 'menu' (Carta) o 'estado' (Mi Pedido)
-  const [currentView, setCurrentView] = useState<'menu' | 'estado'>('menu');
+  // Vista activa: 'menu' (Carta), 'estado' (Mi Pedido) o 'checkout' (Pantalla de Pago)
+  const [currentView, setCurrentView] = useState<'menu' | 'estado' | 'checkout'>('menu');
   const [activeCategory, setActiveCategory] = useState<string>('cat-entradas');
 
   // Estado para desplegar los ingredientes por producto
@@ -33,6 +33,12 @@ function ClienteContent() {
       [productoId]: !prev[productoId]
     }));
   };
+
+  // Estados para el flujo de pago (Checkout)
+  const [tipPercentage, setTipPercentage] = useState<number>(10); // 10% por defecto
+  const [customTip, setCustomTip] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<'mercadopago' | 'transferencia' | 'efectivo'>('mercadopago');
+  const [checkoutSuccess, setCheckoutSuccess] = useState<boolean>(false);
 
   useEffect(() => {
     const tableId = mesaParam || mesaSelector;
@@ -131,6 +137,73 @@ function ClienteContent() {
   // Historial de pedidos entregados de esta mesa
   const historialPedidos = mesa ? pedidos.filter((p) => p.mesaId === mesa.id && p.estado === 'ENTREGADO') : [];
 
+  // Obtener todos los pedidos asociados a esta mesa en esta sesión (tanto activos como entregados)
+  const pedidosSesion = mesa ? pedidos.filter((p) => p.mesaId === mesa.id) : [];
+
+  // Calcular total de consumos en esta sesión
+  const totalConsumido = pedidosSesion.reduce((total, p) => {
+    return total + p.detalles.reduce((sub, d) => {
+      const precio = getPrecioProducto(d.productoId);
+      return sub + precio * d.cantidad;
+    }, 0);
+  }, 0);
+
+  // Obtener lista consolidada de productos consumidos para mostrar en la factura
+  const itemsConsolidados: { productoId: string; nombre: string; cantidad: number; precio: number }[] = [];
+  
+  pedidosSesion.forEach((p) => {
+    p.detalles.forEach((d) => {
+      const existente = itemsConsolidados.find((x) => x.productoId === d.productoId);
+      const precio = getPrecioProducto(d.productoId);
+      const nombre = getNombreProducto(d.productoId);
+      if (existente) {
+        existente.cantidad += d.cantidad;
+      } else {
+        itemsConsolidados.push({
+          productoId: d.productoId,
+          nombre,
+          cantidad: d.cantidad,
+          precio,
+        });
+      }
+    });
+  });
+
+  const getTipAmount = () => {
+    if (tipPercentage === 0) return 0;
+    if (tipPercentage === 10) return Math.round(totalConsumido * 0.1);
+    if (tipPercentage === 15) return Math.round(totalConsumido * 0.15);
+    return parseFloat(customTip) || 0;
+  };
+
+  const tipAmount = getTipAmount();
+  const totalConPropina = totalConsumido + tipAmount;
+
+  const handleConfirmarPago = async () => {
+    if (!mesa) return;
+    try {
+      // Marcar todos los pedidos pendientes de la mesa como ENTREGADO
+      const pedidosDeLaMesa = pedidos.filter((p) => p.mesaId === mesa.id && p.estado !== 'ENTREGADO');
+      for (const p of pedidosDeLaMesa) {
+        await db.actualizarEstadoPedido(p.id, 'ENTREGADO');
+      }
+      // Desactivar la mesa (cierra la sesión)
+      await db.setMesaEstado(mesa.id, 'INACTIVE');
+      setCheckoutSuccess(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al procesar el pago';
+      alert(msg);
+    }
+  };
+
+  const handleVolverAlInicio = () => {
+    setCheckoutSuccess(false);
+    setMesaSelector('');
+    setCart({});
+    setCurrentView('menu');
+    window.history.pushState({}, '', '/');
+  };
+
   // 1. PANTALLA DE SIMULACIÓN DE ESCANEO QR (SI NO HAY MESA ACTIVA)
   if (!mesa) {
     return (
@@ -186,7 +259,7 @@ function ClienteContent() {
   }
 
   // 2. PANTALLA DE MESA INACTIVA
-  if (mesa.estado === 'INACTIVE') {
+  if (mesa.estado === 'INACTIVE' && !checkoutSuccess) {
     return (
       <div className="mobile-wrapper" style={{ padding: '1rem' }}>
         <header className="app-header" style={{ borderBottom: 'none' }}>
@@ -220,7 +293,260 @@ function ClienteContent() {
     );
   }
 
-  // 3. WIDGET DE TIEMPOS DE ESPERA SEMÁNTICO
+  // 3. PANTALLA DE PAGO LIMPIA (CHECKOUT VIEW)
+  if (currentView === 'checkout') {
+    if (checkoutSuccess) {
+      return (
+        <div className="mobile-wrapper" style={{ padding: '2rem', justifyContent: 'center', display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center' }}>
+          <div className="card" style={{ padding: '2rem', border: '2px solid var(--color-success)', boxShadow: '0 8px 30px rgba(46, 125, 50, 0.08)', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '3rem' }}>🎉</span>
+            <h2 className="card-title" style={{ color: 'var(--color-success)', fontSize: '1.4rem' }}>¡Pago Exitoso!</h2>
+            <p className="card-desc" style={{ fontSize: '0.9rem', lineHeight: 1.4 }}>
+              Tu pago para la <strong>Mesa #{mesa.numero}</strong> fue registrado con éxito por un total facturado de:
+            </p>
+            <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--color-success)', margin: '0.5rem 0' }}>
+              ${totalConPropina.toLocaleString('es-AR')}
+            </div>
+            <p className="card-desc" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+              (Consumo: ${totalConsumido.toLocaleString('es-AR')} + Propina: ${tipAmount.toLocaleString('es-AR')})
+            </p>
+            <p className="card-desc" style={{ fontSize: '0.85rem' }}>
+              La mesa ha sido cerrada correctamente. ¡Muchas gracias por tu visita!
+            </p>
+            <button
+              onClick={handleVolverAlInicio}
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: '1rem', backgroundColor: 'var(--color-primary)', borderColor: 'var(--color-primary)' }}
+            >
+              Volver al Inicio
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mobile-wrapper" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', minHeight: '100vh', backgroundColor: 'var(--bg-secondary)' }}>
+        
+        {/* Header de checkout */}
+        <header className="app-header" style={{ position: 'static', backgroundColor: 'transparent', padding: '0.5rem 0', borderBottom: 'none' }}>
+          <button
+            onClick={() => setCurrentView('estado')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem'
+            }}
+          >
+            ← Volver
+          </button>
+          <strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>Mesa #{mesa.numero} • Factura</strong>
+          <div style={{ width: '50px' }}></div>
+        </header>
+
+        {/* Detalle consolidado de productos */}
+        <section className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', backgroundColor: 'var(--bg-primary)' }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, borderBottom: '1px solid var(--border-color)', paddingBottom: '0.4rem', color: 'var(--text-primary)' }}>
+            📝 Resumen del Servicio
+          </h3>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto', paddingRight: '2px' }}>
+            {itemsConsolidados.map((item) => (
+              <div key={item.productoId} className="flex-between" style={{ fontSize: '0.85rem' }}>
+                <span>{item.nombre} <strong style={{ color: 'var(--color-primary)' }}>x{item.cantidad}</strong></span>
+                <strong>${(item.precio * item.cantidad).toLocaleString('es-AR')}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex-between" style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '0.5rem', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+            <span>Subtotal Consumo:</span>
+            <span>${totalConsumido.toLocaleString('es-AR')}</span>
+          </div>
+        </section>
+
+        {/* Sección de Propina */}
+        <section className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            ❤️ Propina para los Mozos
+          </h3>
+          
+          {/* Botones rápidos */}
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            {[
+              { label: '0%', value: 0 },
+              { label: '10%', value: 10 },
+              { label: '15%', value: 15 },
+              { label: 'Otro', value: -1 }
+            ].map((p) => {
+              const active = tipPercentage === p.value;
+              return (
+                <button
+                  key={p.value}
+                  onClick={() => {
+                    setTipPercentage(p.value);
+                    if (p.value !== -1) setCustomTip('');
+                  }}
+                  className="btn"
+                  style={{
+                    flex: 1,
+                    padding: '0.4rem 0',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    backgroundColor: active ? 'var(--color-primary)' : 'var(--bg-primary)',
+                    color: active ? '#FFFFFF' : 'var(--text-secondary)',
+                    borderColor: active ? 'var(--color-primary)' : 'var(--border-color)'
+                  }}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Campo para propina custom */}
+          {tipPercentage === -1 && (
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Monto: $</span>
+              <input
+                type="number"
+                placeholder="Ingresa la propina..."
+                value={customTip}
+                onChange={(e) => setCustomTip(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '0.45rem',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--border-radius-sm)',
+                  fontSize: '0.85rem',
+                  fontFamily: 'inherit',
+                  color: 'var(--text-primary)',
+                  backgroundColor: 'var(--bg-primary)'
+                }}
+              />
+            </div>
+          )}
+        </section>
+
+        {/* Sección de Opciones de Pago */}
+        <section className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            💳 Método de Pago
+          </h3>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {([
+              { id: 'mercadopago', label: 'Mercado Pago (QR/Tarjeta)', icon: '📱', color: '#009EE3' },
+              { id: 'transferencia', label: 'Transferencia Bancaria (Alias/CBU)', icon: '🏦', color: '#F26A2E' },
+              { id: 'efectivo', label: 'Efectivo / Pagar en Caja', icon: '💵', color: '#2E7D32' }
+            ] as const).map((method) => {
+              const selected = paymentMethod === method.id;
+              return (
+                <button
+                  key={method.id}
+                  onClick={() => setPaymentMethod(method.id)}
+                  className="btn"
+                  style={{
+                    justifyContent: 'flex-start',
+                    padding: '0.65rem 0.85rem',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    border: selected ? `2px solid ${method.color}` : '1px solid var(--border-color)',
+                    backgroundColor: selected ? 'rgba(0,0,0,0.01)' : 'var(--bg-primary)',
+                    color: 'var(--text-primary)'
+                  }}
+                >
+                  <span style={{ marginRight: '0.5rem' }}>{method.icon}</span>
+                  <span style={{ flex: 1, textAlign: 'left' }}>{method.label}</span>
+                  {selected && <span style={{ color: method.color }}>●</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Detalles dinámicos según método */}
+          <div style={{
+            marginTop: '0.5rem',
+            padding: '0.75rem',
+            borderRadius: 'var(--border-radius-sm)',
+            backgroundColor: 'rgba(0,0,0,0.02)',
+            border: '1px solid var(--border-color)',
+            fontSize: '0.78rem',
+            lineHeight: 1.4,
+            color: 'var(--text-secondary)'
+          }}>
+            {paymentMethod === 'mercadopago' && (
+              <div>
+                <strong>📱 Pago con Mercado Pago:</strong>
+                <p style={{ marginTop: '0.15rem' }}>Se simulará una redirección rápida a la billetera virtual de Mercado Pago para abonar el total.</p>
+              </div>
+            )}
+            {paymentMethod === 'transferencia' && (
+              <div>
+                <strong>🏦 Datos Bancarios para Transferencia:</strong>
+                <p style={{ margin: '0.15rem 0' }}><strong>Alias:</strong> menu.digital.mp</p>
+                <p style={{ margin: '0.15rem 0' }}><strong>CBU:</strong> 0000003100000000000001</p>
+                <p style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 650 }}>* Envíe el comprobante de transferencia al mesero al finalizar.</p>
+              </div>
+            )}
+            {paymentMethod === 'efectivo' && (
+              <div>
+                <strong>💵 Pago en Efectivo:</strong>
+                <p style={{ marginTop: '0.15rem' }}>El mesero se acercará a su mesa para realizar el cobro físico de la cuenta. También puede dirigirse a la caja del local.</p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Factura final y Confirmación */}
+        <section className="card" style={{ padding: '1rem', marginTop: 'auto', border: '1px solid var(--color-primary)', backgroundColor: 'var(--bg-primary)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', borderBottom: '1px dashed var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+            <div className="flex-between" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <span>Total Consumido:</span>
+              <span>${totalConsumido.toLocaleString('es-AR')}</span>
+            </div>
+            <div className="flex-between" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <span>Propina:</span>
+              <span style={{ color: tipAmount > 0 ? 'var(--color-success)' : 'inherit' }}>
+                ${tipAmount.toLocaleString('es-AR')}
+              </span>
+            </div>
+          </div>
+          
+          <div className="flex-between" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
+            <span>Total a Pagar:</span>
+            <span style={{ color: 'var(--color-primary)' }}>
+              ${totalConPropina.toLocaleString('es-AR')}
+            </span>
+          </div>
+
+          <button
+            onClick={handleConfirmarPago}
+            className="btn"
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              fontSize: '0.95rem',
+              fontWeight: 700,
+              backgroundColor: 'var(--color-primary)',
+              borderColor: 'var(--color-primary)',
+              color: '#FFFFFF'
+            }}
+          >
+            🔒 Confirmar y Pagar
+          </button>
+        </section>
+      </div>
+    );
+  }
+
+  // 4. WIDGET DE TIEMPOS DE ESPERA SEMÁNTICO
   const renderTimerWidget = () => {
     const isDelayed = pedidoActivo?.estado === 'RETRAZO';
     const bg = isDelayed ? 'var(--color-danger-bg)' : 'rgba(46, 125, 50, 0.08)';
@@ -251,7 +577,7 @@ function ClienteContent() {
     );
   };
 
-  // 4. FLUJO DE NAVEGACIÓN ACTIVO (CLIENTE HABILITADO)
+  // 5. FLUJO DE NAVEGACIÓN ACTIVO (CLIENTE HABILITADO)
   return (
     <div className="mobile-wrapper">
       
@@ -620,6 +946,33 @@ function ClienteContent() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {/* Botón flotante al final de la pantalla para realizar el pago de la cuenta de la sesión */}
+            {totalConsumido > 0 && (
+              <button
+                className="btn"
+                onClick={() => {
+                  setCurrentView('checkout');
+                  setTipPercentage(10);
+                  setCustomTip('');
+                  setCheckoutSuccess(false);
+                }}
+                style={{
+                  width: '100%',
+                  marginTop: '1.25rem',
+                  backgroundColor: 'var(--color-success)',
+                  borderColor: 'var(--color-success)',
+                  color: '#FFFFFF',
+                  padding: '0.75rem',
+                  fontSize: '0.95rem',
+                  fontWeight: 700,
+                  boxShadow: '0 4px 12px rgba(46,125,50,0.15)',
+                  cursor: 'pointer'
+                }}
+              >
+                💳 Pagar Cuenta (${totalConsumido.toLocaleString('es-AR')})
+              </button>
             )}
 
           </div>
