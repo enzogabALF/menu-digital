@@ -24,6 +24,16 @@ function ClienteContent() {
   const [currentView, setCurrentView] = useState<'menu' | 'estado'>('menu');
   const [activeCategory, setActiveCategory] = useState<string>('cat-entradas');
 
+  // Estado para desplegar los ingredientes por producto
+  const [showIngredients, setShowIngredients] = useState<{ [productoId: string]: boolean }>({});
+
+  const toggleIngredients = (productoId: string) => {
+    setShowIngredients((prev) => ({
+      ...prev,
+      [productoId]: !prev[productoId]
+    }));
+  };
+
   useEffect(() => {
     const tableId = mesaParam || mesaSelector;
     if (tableId) {
@@ -346,26 +356,88 @@ function ClienteContent() {
                       style={{
                         padding: '0.85rem',
                         boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
-                        transition: 'box-shadow 0.2s ease'
+                        transition: 'box-shadow 0.2s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.5rem'
                       }}
                     >
-                      <div className="flex-between">
-                        <span className="card-title" style={{ fontSize: '0.95rem', fontWeight: 700 }}>
-                          {prod.nombre}
-                        </span>
-                        <span className="card-price" style={{ fontSize: '1rem', fontWeight: 800 }}>
-                          ${prod.precio.toLocaleString('es-AR')}
-                        </span>
+                      {/* Fila Principal: Imagen a la izquierda, detalles a la derecha */}
+                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                        {prod.imagenUrl && (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={prod.imagenUrl}
+                            alt={prod.nombre}
+                            style={{
+                              width: '70px',
+                              height: '70px',
+                              objectFit: 'cover',
+                              borderRadius: 'var(--border-radius-sm)',
+                              border: '1px solid var(--border-color)',
+                              flexShrink: 0
+                            }}
+                          />
+                        )}
+                        
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          <div className="flex-between" style={{ alignItems: 'flex-start' }}>
+                            <span className="card-title" style={{ fontSize: '0.92rem', fontWeight: 700 }}>
+                              {prod.nombre}
+                            </span>
+                            <span className="card-price" style={{ fontSize: '0.95rem', fontWeight: 800 }}>
+                              ${prod.precio.toLocaleString('es-AR')}
+                            </span>
+                          </div>
+                          
+                          {prod.descripcion && (
+                            <p className="card-desc" style={{ fontSize: '0.75rem', margin: 0, lineHeight: 1.3 }}>
+                              {prod.descripcion}
+                            </p>
+                          )}
+                          
+                          {prod.ingredientes && prod.ingredientes.length > 0 && (
+                            <button
+                              onClick={() => toggleIngredients(prod.id)}
+                              style={{
+                                alignSelf: 'flex-start',
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--color-primary)',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                padding: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.2rem',
+                                marginTop: '0.25rem'
+                              }}
+                            >
+                              ℹ️ {showIngredients[prod.id] ? 'Ocultar ingredientes' : 'Ver ingredientes'}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      
-                      {prod.descripcion && (
-                        <p className="card-desc" style={{ fontSize: '0.78rem', margin: '0.25rem 0 0.5rem 0', lineHeight: 1.3 }}>
-                          {prod.descripcion}
-                        </p>
+
+                      {/* Desplegable de Ingredientes */}
+                      {showIngredients[prod.id] && prod.ingredientes && (
+                        <div style={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          padding: '0.5rem 0.75rem',
+                          borderRadius: 'var(--border-radius-sm)',
+                          fontSize: '0.72rem',
+                          color: 'var(--text-secondary)',
+                          borderLeft: '3px solid var(--color-primary)',
+                          marginTop: '0.25rem'
+                        }}>
+                          <strong>Ingredientes: </strong>
+                          {prod.ingredientes.join(', ')}
+                        </div>
                       )}
 
                       {/* +/- Selector visual integrado */}
-                      <div className="flex-between" style={{ marginTop: '0.5rem', alignItems: 'center' }}>
+                      <div className="flex-between" style={{ marginTop: '0.25rem', borderTop: '1px solid rgba(0,0,0,0.03)', paddingTop: '0.5rem', alignItems: 'center' }}>
                         <div></div>
                         <div className="flex-gap-sm" style={{ alignItems: 'center' }}>
                           {qty > 0 ? (

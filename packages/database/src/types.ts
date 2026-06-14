@@ -22,6 +22,8 @@ export interface Producto {
   precio: number;
   categoriaId: string;
   activo: boolean;
+  imagenUrl?: string;
+  ingredientes?: string[];
 }
 
 export interface DetallePedido {

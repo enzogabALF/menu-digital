@@ -21,16 +21,106 @@ const DEFAULT_CATEGORIAS: Categoria[] = [
 ];
 
 const DEFAULT_PRODUCTOS: Producto[] = [
-  { id: 'prod-empanada', nombre: 'Empanada de Carne', descripcion: 'Cortada a cuchillo, receta norteña, frita o al horno', precio: 1200, categoriaId: 'cat-entradas', activo: true },
-  { id: 'prod-provoleta', nombre: 'Provoleta a la Chapa', descripcion: 'Queso provolone fundido con orégano y chimichurri', precio: 2500, categoriaId: 'cat-entradas', activo: true },
-  { id: 'prod-bife', nombre: 'Bife de Lomo con Papas', descripcion: 'Lomo tierno a la parrilla con papas bastón crujientes', precio: 8500, categoriaId: 'cat-principales', activo: true },
-  { id: 'prod-milanesa', nombre: 'Milanesa con Papas Fritas', descripcion: 'Milanesa de ternera bien crocante', precio: 5500, categoriaId: 'cat-principales', activo: true },
-  { id: 'prod-noquis', nombre: 'Ñoquis Bolognesa', descripcion: 'Ñoquis caseros con salsa boloñesa tradicional', precio: 4800, categoriaId: 'cat-principales', activo: true },
-  { id: 'prod-agua', nombre: 'Agua Mineral 500ml', descripcion: 'Sin gas o con gas', precio: 1000, categoriaId: 'cat-bebidas', activo: true },
-  { id: 'prod-gaseosa', nombre: 'Gaseosa Cola 354ml', descripcion: 'Coca-Cola original helada en lata', precio: 1200, categoriaId: 'cat-bebidas', activo: true },
-  { id: 'prod-cerveza', nombre: 'Cerveza Amber Lager 473ml', descripcion: 'Cerveza artesanal bien helada', precio: 1800, categoriaId: 'cat-bebidas', activo: true },
-  { id: 'prod-flan', nombre: 'Flan Casero', descripcion: 'Con dulce de leche o crema chantilly', precio: 1500, categoriaId: 'cat-postres', activo: true },
-  { id: 'prod-helado', nombre: 'Helado de 2 Bochas', descripcion: 'Crema americana y dulce de leche granizado', precio: 1600, categoriaId: 'cat-postres', activo: true },
+  {
+    id: 'prod-empanada',
+    nombre: 'Empanada de Carne',
+    descripcion: 'Cortada a cuchillo, receta norteña, frita o al horno',
+    precio: 1200,
+    categoriaId: 'cat-entradas',
+    activo: true,
+    imagenUrl: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=150&auto=format&fit=crop&q=60',
+    ingredientes: ['Carne cortada a cuchillo', 'Cebolla de verdeo', 'Huevo duro', 'Comino', 'Pimentón dulce', 'Masa casera']
+  },
+  {
+    id: 'prod-provoleta',
+    nombre: 'Provoleta a la Chapa',
+    descripcion: 'Queso provolone fundido con orégano y chimichurri',
+    precio: 2500,
+    categoriaId: 'cat-entradas',
+    activo: true,
+    imagenUrl: 'https://images.unsplash.com/photo-1559561853-084cf17f28fa?w=150&auto=format&fit=crop&q=60',
+    ingredientes: ['Queso Provolone', 'Orégano', 'Aceite de oliva', 'Chimichurri', 'Pimentón']
+  },
+  {
+    id: 'prod-bife',
+    nombre: 'Bife de Lomo con Papas',
+    descripcion: 'Lomo tierno a la parrilla con papas bastón crujientes',
+    precio: 8500,
+    categoriaId: 'cat-principales',
+    activo: true,
+    imagenUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=150&auto=format&fit=crop&q=60',
+    ingredientes: ['Bife de lomo (300g)', 'Papas fritas bastón', 'Sal marina', 'Aceite de girasol', 'Romero']
+  },
+  {
+    id: 'prod-milanesa',
+    nombre: 'Milanesa con Papas Fritas',
+    descripcion: 'Milanesa de ternera bien crocante',
+    precio: 5500,
+    categoriaId: 'cat-principales',
+    activo: true,
+    imagenUrl: 'https://images.unsplash.com/photo-1599921841143-819065a55cc6?w=150&auto=format&fit=crop&q=60',
+    ingredientes: ['Carne de ternera', 'Pan rallado', 'Huevo', 'Ajo y perejil', 'Papas fritas']
+  },
+  {
+    id: 'prod-noquis',
+    nombre: 'Ñoquis Bolognesa',
+    descripcion: 'Ñoquis caseros con salsa boloñesa tradicional',
+    precio: 4800,
+    categoriaId: 'cat-principales',
+    activo: true,
+    imagenUrl: 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=150&auto=format&fit=crop&q=60',
+    ingredientes: ['Ñoquis de papa caseros', 'Carne picada vacuna', 'Salsa de tomate', 'Cebolla', 'Zanahoria', 'Vino tinto', 'Queso rallado']
+  },
+  {
+    id: 'prod-agua',
+    nombre: 'Agua Mineral 500ml',
+    descripcion: 'Sin gas o con gas',
+    precio: 1000,
+    categoriaId: 'cat-bebidas',
+    activo: true,
+    imagenUrl: 'https://images.unsplash.com/photo-1608885898957-a599fb1b4600?w=150&auto=format&fit=crop&q=60',
+    ingredientes: ['Agua de manantial natural purificada']
+  },
+  {
+    id: 'prod-gaseosa',
+    nombre: 'Gaseosa Cola 354ml',
+    descripcion: 'Coca-Cola original helada en lata',
+    precio: 1200,
+    categoriaId: 'cat-bebidas',
+    activo: true,
+    imagenUrl: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=150&auto=format&fit=crop&q=60',
+    ingredientes: ['Agua carbonatada', 'Azúcar', 'Colorante caramelo', 'Acidulantes y cafeína']
+  },
+  {
+    id: 'prod-cerveza',
+    nombre: 'Cerveza Amber Lager 473ml',
+    descripcion: 'Cerveza artesanal bien helada',
+    precio: 1800,
+    categoriaId: 'cat-bebidas',
+    activo: true,
+    imagenUrl: 'https://images.unsplash.com/photo-1567696911980-2eed69a46042?w=150&auto=format&fit=crop&q=60',
+    ingredientes: ['Agua filtrada', 'Malta de cebada caramelizada', 'Lúpulo seleccionado', 'Levadura lager']
+  },
+  {
+    id: 'prod-flan',
+    nombre: 'Flan Casero',
+    descripcion: 'Con dulce de leche o crema chantilly',
+    precio: 1500,
+    categoriaId: 'cat-postres',
+    activo: true,
+    imagenUrl: 'https://images.unsplash.com/photo-1528975604071-b4da52a2d659?w=150&auto=format&fit=crop&q=60',
+    ingredientes: ['Huevos frescos', 'Leche entera', 'Azúcar', 'Esencia de vainilla', 'Dulce de leche', 'Crema chantilly']
+  },
+  {
+    id: 'prod-helado',
+    nombre: 'Helado de 2 Bochas',
+    descripcion: 'Crema americana y dulce de leche granizado',
+    precio: 1600,
+    categoriaId: 'cat-postres',
+    activo: true,
+    imagenUrl: 'https://images.unsplash.com/photo-1501443762994-82bd5dace89a?w=150&auto=format&fit=crop&q=60',
+    ingredientes: ['Crema de leche', 'Leche', 'Azúcar', 'Vainilla natural', 'Dulce de leche', 'Chocolate granizado']
+  }
 ];
 
 let syncChannel: BroadcastChannel | null = null;

@@ -1,0 +1,177 @@
+{
+  "mesas": [
+    {
+      "id": "mesa-1",
+      "numero": 1,
+      "estado": "INACTIVE",
+      "mesaPadreId": null,
+      "createdAt": "2026-06-14T22:06:57.574Z",
+      "updatedAt": "2026-06-14T22:06:57.574Z"
+    },
+    {
+      "id": "mesa-2",
+      "numero": 2,
+      "estado": "INACTIVE",
+      "mesaPadreId": null,
+      "createdAt": "2026-06-14T22:06:57.574Z",
+      "updatedAt": "2026-06-14T22:11:21.806Z"
+    },
+    {
+      "id": "mesa-3",
+      "numero": 3,
+      "estado": "INACTIVE",
+      "mesaPadreId": null,
+      "createdAt": "2026-06-14T22:06:57.574Z",
+      "updatedAt": "2026-06-14T22:11:25.820Z"
+    },
+    {
+      "id": "mesa-4",
+      "numero": 4,
+      "estado": "INACTIVE",
+      "mesaPadreId": null,
+      "createdAt": "2026-06-14T22:06:57.574Z",
+      "updatedAt": "2026-06-14T22:06:57.574Z"
+    },
+    {
+      "id": "mesa-5",
+      "numero": 5,
+      "estado": "INACTIVE",
+      "mesaPadreId": null,
+      "createdAt": "2026-06-14T22:06:57.574Z",
+      "updatedAt": "2026-06-14T22:06:57.574Z"
+    },
+    {
+      "id": "mesa-6",
+      "numero": 6,
+      "estado": "INACTIVE",
+      "mesaPadreId": null,
+      "createdAt": "2026-06-14T22:06:57.574Z",
+      "updatedAt": "2026-06-14T22:06:57.574Z"
+    },
+    {
+      "id": "mesa-7",
+      "numero": 7,
+      "estado": "INACTIVE",
+      "mesaPadreId": null,
+      "createdAt": "2026-06-14T22:06:57.574Z",
+      "updatedAt": "2026-06-14T22:06:57.574Z"
+    },
+    {
+      "id": "mesa-8",
+      "numero": 8,
+      "estado": "INACTIVE",
+      "mesaPadreId": null,
+      "createdAt": "2026-06-14T22:06:57.574Z",
+      "updatedAt": "2026-06-14T22:06:57.574Z"
+    },
+    {
+      "id": "mesa-9",
+      "numero": 9,
+      "estado": "INACTIVE",
+      "mesaPadreId": null,
+      "createdAt": "2026-06-14T22:06:57.574Z",
+      "updatedAt": "2026-06-14T22:06:57.574Z"
+    }
+  ],
+  "pedidos": [
+    {
+      "id": "ped-t8pjyd3",
+      "mesaId": "mesa-3",
+      "estado": "ENTREGADO",
+      "createdAt": "2026-06-14T22:07:55.831Z",
+      "updatedAt": "2026-06-14T22:08:06.200Z",
+      "detalles": [
+        {
+          "id": "det-ped-t8pjyd3-0-62w",
+          "pedidoId": "ped-t8pjyd3",
+          "productoId": "prod-empanada",
+          "cantidad": 3,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:07:55.831Z"
+        }
+      ]
+    },
+    {
+      "id": "ped-37urat9",
+      "mesaId": "mesa-3",
+      "estado": "ENTREGADO",
+      "createdAt": "2026-06-14T22:08:25.432Z",
+      "updatedAt": "2026-06-14T22:09:06.123Z",
+      "detalles": [
+        {
+          "id": "det-ped-37urat9-0-8ey",
+          "pedidoId": "ped-37urat9",
+          "productoId": "prod-provoleta",
+          "cantidad": 6,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:08:25.432Z"
+        },
+        {
+          "id": "det-ped-37urat9-if3xltc",
+          "pedidoId": "ped-37urat9",
+          "productoId": "prod-cerveza",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:08:40.155Z"
+        }
+      ]
+    },
+    {
+      "id": "ped-oofj4xv",
+      "mesaId": "mesa-3",
+      "estado": "ENTREGADO",
+      "createdAt": "2026-06-14T22:09:42.669Z",
+      "updatedAt": "2026-06-14T22:10:29.254Z",
+      "detalles": [
+        {
+          "id": "det-ped-oofj4xv-0-xg5",
+          "pedidoId": "ped-oofj4xv",
+          "productoId": "prod-milanesa",
+          "cantidad": 3,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:09:42.669Z"
+        },
+        {
+          "id": "det-ped-oofj4xv-1-ewl",
+          "pedidoId": "ped-oofj4xv",
+          "productoId": "prod-noquis",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:09:42.669Z"
+        },
+        {
+          "id": "det-ped-oofj4xv-2-ni6",
+          "pedidoId": "ped-oofj4xv",
+          "productoId": "prod-bife",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:09:42.669Z"
+        },
+        {
+          "id": "det-ped-oofj4xv-3-ewl",
+          "pedidoId": "ped-oofj4xv",
+          "productoId": "prod-provoleta",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:09:42.669Z"
+        },
+        {
+          "id": "det-ped-oofj4xv-4-t0z",
+          "pedidoId": "ped-oofj4xv",
+          "productoId": "prod-gaseosa",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:09:42.669Z"
+        },
+        {
+          "id": "det-ped-oofj4xv-5-e1p",
+          "pedidoId": "ped-oofj4xv",
+          "productoId": "prod-cerveza",
+          "cantidad": 3,
+          "entregado": true,
+          "createdAt": "2026-06-14T22:09:42.669Z"
+        }
+      ]
+    }
+  ]
+}
