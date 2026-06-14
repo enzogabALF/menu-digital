@@ -2,33 +2,33 @@
 
 import React, { useState, useEffect } from 'react';
 import { useMenuSync } from './useMenuSync';
-import { Pedido, Mesa, Producto, OrderStatus } from '@repo/database';
+import { Pedido, Mesa, OrderStatus } from '@repo/database';
 
 export default function CocineroPage() {
   const { db, tick } = useMenuSync();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [mesas, setMesas] = useState<Mesa[]>([]);
-  const [productos, setProductos] = useState<Producto[]>([]);
 
   useEffect(() => {
     db.getPedidos().then(setPedidos);
     db.getMesas().then(setMesas);
-    db.getProductos().then(setProductos);
   }, [db, tick]);
 
   const updateEstado = async (pedidoId: string, nuevoEstado: OrderStatus) => {
     try {
       await db.actualizarEstadoPedido(pedidoId, nuevoEstado);
-    } catch (err: any) {
-      alert(err.message || 'Error al cambiar estado');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      alert(msg);
     }
   };
 
   const toggleItemEntregado = async (pedidoId: string, detalleId: string, entregadoActual: boolean) => {
     try {
       await db.actualizarDetalleEntregado(pedidoId, detalleId, !entregadoActual);
-    } catch (err: any) {
-      alert(err.message || 'Error al cambiar estado del ítem');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      alert(msg);
     }
   };
 

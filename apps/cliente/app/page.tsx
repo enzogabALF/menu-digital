@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useMenuSync } from './useMenuSync';
-import { Mesa, Producto, Pedido, DetallePedido } from '@repo/database';
+import { Mesa, Producto, Pedido } from '@repo/database';
 
 function ClienteContent() {
   const { db, tick } = useMenuSync();
@@ -67,8 +67,9 @@ function ClienteContent() {
       setCart({});
       setCurrentView('estado');
       alert('¡Pedido enviado con éxito a la cocina!');
-    } catch (err: any) {
-      alert(err.message || 'Error al enviar pedido');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      alert(msg);
     }
   };
 
@@ -76,8 +77,9 @@ function ClienteContent() {
     try {
       await db.quitarProductoDePedido(pedidoId, detalleId);
       alert('Producto removido del pedido');
-    } catch (err: any) {
-      alert(err.message || 'No se pudo quitar el producto');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      alert(msg);
     }
   };
 
@@ -96,8 +98,9 @@ function ClienteContent() {
       await db.agregarProductosAPedido(pedidoId, items);
       setCart({});
       alert('¡Productos adicionales agregados al pedido!');
-    } catch (err: any) {
-      alert(err.message || 'Error al agregar productos');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      alert(msg);
     }
   };
 

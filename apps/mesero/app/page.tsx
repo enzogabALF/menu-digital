@@ -32,8 +32,9 @@ export default function MeseroPage() {
     const nuevoEstado = currentEstado === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     try {
       await db.setMesaEstado(id, nuevoEstado);
-    } catch (err: any) {
-      alert(err.message || 'Error al cambiar estado de mesa');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al cambiar estado de mesa';
+      alert(msg);
     }
   };
 
@@ -53,8 +54,9 @@ export default function MeseroPage() {
       setCombineMesaA('');
       setCombineMesaB('');
       alert('Mesas combinadas correctamente');
-    } catch (err: any) {
-      alert(err.message || 'Error al combinar mesas');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al combinar mesas';
+      alert(msg);
     }
   };
 
@@ -63,8 +65,9 @@ export default function MeseroPage() {
     try {
       await db.descombinarMesa(mesaId);
       alert('Mesa descombinada correctamente');
-    } catch (err: any) {
-      alert(err.message || 'Error al descombinar mesa');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al descombinar mesa';
+      alert(msg);
     }
   };
 
@@ -100,8 +103,9 @@ export default function MeseroPage() {
       setCart({});
       setSelectedMesaId(null);
       alert('Pedido registrado con éxito');
-    } catch (err: any) {
-      alert(err.message || 'Error al registrar el pedido');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al registrar el pedido';
+      alert(msg);
     }
   };
 
