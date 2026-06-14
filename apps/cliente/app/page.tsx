@@ -24,21 +24,12 @@ function ClienteContent() {
   const [currentView, setCurrentView] = useState<'menu' | 'estado' | 'checkout'>('menu');
   const [activeCategory, setActiveCategory] = useState<string>('cat-entradas');
 
-  // Estado para desplegar los ingredientes por producto
-  const [showIngredients, setShowIngredients] = useState<{ [productoId: string]: boolean }>({});
-
-  const toggleIngredients = (productoId: string) => {
-    setShowIngredients((prev) => ({
-      ...prev,
-      [productoId]: !prev[productoId]
-    }));
-  };
-
   // Estados para el flujo de pago (Checkout)
   const [tipPercentage, setTipPercentage] = useState<number>(10); // 10% por defecto
   const [customTip, setCustomTip] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'mercadopago' | 'transferencia' | 'efectivo'>('mercadopago');
   const [checkoutSuccess, setCheckoutSuccess] = useState<boolean>(false);
+  const [selectedProductInfo, setSelectedProductInfo] = useState<Producto | null>(null);
 
   useEffect(() => {
     const tableId = mesaParam || mesaSelector;
@@ -169,6 +160,35 @@ function ClienteContent() {
     });
   });
 
+  // Obtener los recomendados (más pedidos en el local) y menú del día
+  const getRocolaItems = () => {
+    const menuDelDia = productos.find((p) => p.id === 'prod-noquis' && p.activo);
+
+    const counts: { [productoId: string]: number } = {};
+    pedidos.forEach((p) => {
+      p.detalles.forEach((d) => {
+        counts[d.productoId] = (counts[d.productoId] || 0) + d.cantidad;
+      });
+    });
+
+    const sortedIds = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => id)
+      .filter((id) => id !== 'prod-noquis');
+
+    const defaultPopular = ['prod-empanada', 'prod-provoleta', 'prod-bife', 'prod-milanesa'];
+    const popularIds = sortedIds.length > 0 
+      ? sortedIds.slice(0, 3) 
+      : defaultPopular.filter(id => id !== 'prod-noquis').slice(0, 3);
+
+    const recomendados = productos.filter((p) => popularIds.includes(p.id) && p.activo);
+
+    return {
+      menuDelDia,
+      recomendados
+    };
+  };
+
   const getTipAmount = () => {
     if (tipPercentage === 0) return 0;
     if (tipPercentage === 10) return Math.round(totalConsumido * 0.1);
@@ -178,6 +198,8 @@ function ClienteContent() {
 
   const tipAmount = getTipAmount();
   const totalConPropina = totalConsumido + tipAmount;
+
+  const { menuDelDia, recomendados } = getRocolaItems();
 
   const handleConfirmarPago = async () => {
     if (!mesa) return;
@@ -546,6 +568,115 @@ function ClienteContent() {
     );
   }
 
+  // 3b. PANTALLA DETALLE DE PRODUCTO (INGREDIENTES)
+  if (selectedProductInfo) {
+    const limpiarIngrediente = (ing: string) => {
+      return ing.replace(/\s*\(\d+g\)/g, '').replace(/\s*\(\d+ml\)/g, '');
+    };
+
+    return (
+      <div className="mobile-wrapper" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', minHeight: '100vh', backgroundColor: 'var(--bg-secondary)' }}>
+        
+        {/* Header de ingredientes */}
+        <header className="app-header" style={{ position: 'static', backgroundColor: 'transparent', padding: '0.5rem 0', borderBottom: 'none' }}>
+          <button
+            onClick={() => setSelectedProductInfo(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem'
+            }}
+          >
+            ← Volver
+          </button>
+          <strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>Detalle de Plato</strong>
+          <div style={{ width: '50px' }}></div>
+        </header>
+
+        {/* Card Principal de Info */}
+        <div className="card" style={{ padding: '0px', overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-primary)' }}>
+          {selectedProductInfo.imagenUrl && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={selectedProductInfo.imagenUrl.replace('w=150', 'w=600')}
+              alt={selectedProductInfo.nombre}
+              style={{
+                width: '100%',
+                height: '240px',
+                objectFit: 'cover',
+                borderBottom: '1px solid var(--border-color)'
+              }}
+            />
+          )}
+
+          <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="flex-between">
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                {selectedProductInfo.nombre}
+              </h2>
+              <span style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--color-primary)' }}>
+                ${selectedProductInfo.precio.toLocaleString('es-AR')}
+              </span>
+            </div>
+
+            {selectedProductInfo.descripcion && (
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                {selectedProductInfo.descripcion}
+              </p>
+            )}
+
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                📋 Ingredientes
+              </h3>
+              
+              <ul style={{ 
+                margin: 0, 
+                paddingLeft: '1.2rem', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '0.5rem',
+                fontSize: '0.85rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.4
+              }}>
+                {selectedProductInfo.ingredientes?.map((ing, index) => (
+                  <li key={index} style={{ listStyleType: 'disc' }}>
+                    {limpiarIngrediente(ing)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Botón Volver Rápido al final */}
+        <button
+          onClick={() => setSelectedProductInfo(null)}
+          className="btn"
+          style={{
+            width: '100%',
+            padding: '0.75rem',
+            fontSize: '0.95rem',
+            fontWeight: 700,
+            backgroundColor: 'var(--color-primary)',
+            borderColor: 'var(--color-primary)',
+            color: '#FFFFFF',
+            marginTop: 'auto'
+          }}
+        >
+          Volver a la Carta
+        </button>
+      </div>
+    );
+  }
+
   // 4. WIDGET DE TIEMPOS DE ESPERA SEMÁNTICO
   const renderTimerWidget = () => {
     const isDelayed = pedidoActivo?.estado === 'RETRAZO';
@@ -636,6 +767,219 @@ function ClienteContent() {
         {/* VISTA A: NAVEGAR MENÚ Y AÑADIR A CARRO */}
         {currentView === 'menu' && (
           <>
+              {/* LA ROCOLA DE RECOMENDADOS Y MENÚ DEL DÍA */}
+              <section style={{ marginBottom: '1.25rem' }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  🎵 La Rocola de Recomendaciones
+                </h3>
+                
+                <div style={{
+                  display: 'flex',
+                  gap: '0.75rem',
+                  overflowX: 'auto',
+                  paddingBottom: '0.5rem',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                  scrollSnapType: 'x mandatory'
+                }}>
+                  {/* 1. Tarjeta de Menú del Día */}
+                  {menuDelDia && (
+                    <div
+                      style={{
+                        flex: '0 0 82%',
+                        scrollSnapAlign: 'start',
+                        borderRadius: 'var(--border-radius-md)',
+                        background: 'linear-gradient(135deg, #FFF9F5 0%, #FFF0E6 100%)',
+                        border: '1.5px solid var(--color-primary)',
+                        padding: '0.85rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.5rem',
+                        boxShadow: '0 4px 12px rgba(242,106,46,0.06)'
+                      }}
+                    >
+                      <div className="flex-between" style={{ alignItems: 'center' }}>
+                        <span style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          backgroundColor: 'var(--color-primary)',
+                          color: '#FFFFFF',
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '50px',
+                          textTransform: 'uppercase'
+                        }}>
+                          ☀️ Menú del Día
+                        </span>
+                        <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+                          ${menuDelDia.precio.toLocaleString('es-AR')}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.55rem', alignItems: 'center' }}>
+                        {menuDelDia.imagenUrl && (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={menuDelDia.imagenUrl}
+                            alt={menuDelDia.nombre}
+                            style={{
+                              width: '45px',
+                              height: '45px',
+                              objectFit: 'cover',
+                              borderRadius: '50%',
+                              border: '1.5px solid var(--color-primary)'
+                            }}
+                          />
+                        )}
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <h4 style={{ fontSize: '0.88rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            {menuDelDia.nombre}
+                            <button
+                              onClick={() => setSelectedProductInfo(menuDelDia)}
+                              style={{
+                                width: '16px',
+                                height: '16px',
+                                borderRadius: '50%',
+                                border: '1px solid var(--color-primary)',
+                                backgroundColor: 'transparent',
+                                color: 'var(--color-primary)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: '800',
+                                fontSize: '0.7rem',
+                                cursor: 'pointer',
+                                padding: 0,
+                                lineHeight: 1
+                              }}
+                            >
+                              !
+                            </button>
+                          </h4>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', margin: '0.15rem 0 0 0', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                            {menuDelDia.descripcion}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        className="btn"
+                        onClick={() => updateCartQty(menuDelDia.id, 1)}
+                        style={{
+                          padding: '0.4rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          backgroundColor: 'var(--color-primary)',
+                          borderColor: 'var(--color-primary)',
+                          color: '#FFFFFF',
+                          width: '100%',
+                          borderRadius: 'var(--border-radius-sm)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⚡ Agregar al Pedido
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 2. Tarjetas de Recomendados */}
+                  {recomendados.map((prod) => (
+                    <div
+                      key={prod.id}
+                      style={{
+                        flex: '0 0 82%',
+                        scrollSnapAlign: 'start',
+                        borderRadius: 'var(--border-radius-md)',
+                        backgroundColor: 'var(--bg-primary)',
+                        border: '1px solid var(--border-color)',
+                        padding: '0.85rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.5rem',
+                        boxShadow: '0 4px 10px rgba(0,0,0,0.02)'
+                      }}
+                    >
+                      <div className="flex-between" style={{ alignItems: 'center' }}>
+                        <span style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          backgroundColor: 'rgba(46, 125, 50, 0.08)',
+                          color: 'var(--color-success)',
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '50px',
+                          textTransform: 'uppercase',
+                          border: '1px solid var(--color-success)'
+                        }}>
+                          🔥 Más Pedido
+                        </span>
+                        <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                          ${prod.precio.toLocaleString('es-AR')}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.55rem', alignItems: 'center' }}>
+                        {prod.imagenUrl && (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={prod.imagenUrl}
+                            alt={prod.nombre}
+                            style={{
+                              width: '45px',
+                              height: '45px',
+                              objectFit: 'cover',
+                              borderRadius: '50%',
+                              border: '1px solid var(--border-color)'
+                            }}
+                          />
+                        )}
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <h4 style={{ fontSize: '0.88rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            {prod.nombre}
+                            <button
+                              onClick={() => setSelectedProductInfo(prod)}
+                              style={{
+                                width: '16px',
+                                height: '16px',
+                                borderRadius: '50%',
+                                border: '1px solid var(--color-primary)',
+                                backgroundColor: 'transparent',
+                                color: 'var(--color-primary)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: '800',
+                                fontSize: '0.7rem',
+                                cursor: 'pointer',
+                                padding: 0,
+                                lineHeight: 1
+                              }}
+                            >
+                              !
+                            </button>
+                          </h4>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', margin: '0.15rem 0 0 0', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                            {prod.descripcion}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => updateCartQty(prod.id, 1)}
+                        style={{
+                          padding: '0.4rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          width: '100%',
+                          borderRadius: 'var(--border-radius-sm)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ➕ Agregar al Pedido
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
             {/* Chips de Categorías (Horizontal Scroll) */}
             <div style={{
               display: 'flex',
@@ -708,8 +1052,33 @@ function ClienteContent() {
                         
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                           <div className="flex-between" style={{ alignItems: 'flex-start' }}>
-                            <span className="card-title" style={{ fontSize: '0.92rem', fontWeight: 700 }}>
+                            <span className="card-title" style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                               {prod.nombre}
+                              {prod.ingredientes && prod.ingredientes.length > 0 && (
+                                <button
+                                  onClick={() => setSelectedProductInfo(prod)}
+                                  style={{
+                                    width: '18px',
+                                    height: '18px',
+                                    borderRadius: '50%',
+                                    border: '1.5px solid var(--color-primary)',
+                                    backgroundColor: 'transparent',
+                                    color: 'var(--color-primary)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontWeight: '800',
+                                    fontSize: '0.75rem',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                    lineHeight: 1,
+                                    margin: 0
+                                  }}
+                                  title="Ver ingredientes"
+                                >
+                                  !
+                                </button>
+                              )}
                             </span>
                             <span className="card-price" style={{ fontSize: '0.95rem', fontWeight: 800 }}>
                               ${prod.precio.toLocaleString('es-AR')}
@@ -721,46 +1090,8 @@ function ClienteContent() {
                               {prod.descripcion}
                             </p>
                           )}
-                          
-                          {prod.ingredientes && prod.ingredientes.length > 0 && (
-                            <button
-                              onClick={() => toggleIngredients(prod.id)}
-                              style={{
-                                alignSelf: 'flex-start',
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'var(--color-primary)',
-                                fontSize: '0.72rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                padding: 0,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.2rem',
-                                marginTop: '0.25rem'
-                              }}
-                            >
-                              ℹ️ {showIngredients[prod.id] ? 'Ocultar ingredientes' : 'Ver ingredientes'}
-                            </button>
-                          )}
                         </div>
                       </div>
-
-                      {/* Desplegable de Ingredientes */}
-                      {showIngredients[prod.id] && prod.ingredientes && (
-                        <div style={{
-                          backgroundColor: 'var(--bg-secondary)',
-                          padding: '0.5rem 0.75rem',
-                          borderRadius: 'var(--border-radius-sm)',
-                          fontSize: '0.72rem',
-                          color: 'var(--text-secondary)',
-                          borderLeft: '3px solid var(--color-primary)',
-                          marginTop: '0.25rem'
-                        }}>
-                          <strong>Ingredientes: </strong>
-                          {prod.ingredientes.join(', ')}
-                        </div>
-                      )}
 
                       {/* +/- Selector visual integrado */}
                       <div className="flex-between" style={{ marginTop: '0.25rem', borderTop: '1px solid rgba(0,0,0,0.03)', paddingTop: '0.5rem', alignItems: 'center' }}>
