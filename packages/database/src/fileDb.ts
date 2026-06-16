@@ -2,7 +2,23 @@ import fs from 'fs';
 import path from 'path';
 import { Mesa, Pedido } from './types';
 
-const DB_PATH = 'c:\\Users\\Usuario\\OneDrive\\Desktop\\Compilador y lenguaje\\menu-digital\\db.json';
+function findDbPath(): string {
+  let currentDir = process.cwd();
+  for (let i = 0; i < 5; i++) {
+    const candidatePath = path.join(currentDir, 'db.json');
+    if (fs.existsSync(candidatePath) || fs.existsSync(path.join(currentDir, 'pnpm-workspace.yaml'))) {
+      return candidatePath;
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      break;
+    }
+    currentDir = parentDir;
+  }
+  return path.join(process.cwd(), 'db.json');
+}
+
+const DB_PATH = findDbPath();
 
 export interface DbState {
   mesas: Mesa[];
