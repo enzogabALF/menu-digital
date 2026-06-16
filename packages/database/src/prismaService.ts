@@ -271,7 +271,7 @@ export const PrismaService = {
 
     const updated = await prisma.pedido.update({
       where: { id: pedidoId },
-      data: { estado },
+      data: { estado: estado as any },
       include: {
         mesa: true,
         detalles: {
@@ -315,5 +315,29 @@ export const PrismaService = {
     });
 
     return updated as unknown as Pedido;
+  },
+
+  async llamarMesero(mesaId: string, llamando: boolean): Promise<Mesa> {
+    throw new Error('Not implemented');
+  },
+
+  async asignarMeseroAMesa(mesaId: string, meseroId: string | null): Promise<Mesa> {
+    throw new Error('Not implemented');
+  },
+
+  async rechazarPedido(pedidoId: string, motivo: string): Promise<Pedido> {
+    throw new Error('Not implemented');
+  },
+
+  async rechazarDetallePedido(pedidoId: string, detalleId: string, motivo: string): Promise<Pedido> {
+    throw new Error('Not implemented');
+  },
+
+  async reiniciarSesionMesa(id: string): Promise<Mesa> {
+    throw new Error('Not implemented');
+  },
+
+  async pagarPedidosDeMesa(mesaId: string): Promise<Pedido[]> {
+    throw new Error('Not implemented');
   },
 };

@@ -1,7 +1,10 @@
+@import "tailwindcss";
+
 :root {
   /* Marca y Acciones */
   --color-primary: #F26A2E;
   --color-primary-dark: #D85217;
+  --color-primary-text: #FFFFFF;
 
   /* Semánticos */
   --color-danger: #D32F2F;
@@ -25,6 +28,27 @@
   --spacing-sm: 0.5rem;
   --spacing-md: 1rem;
   --spacing-lg: 1.5rem;
+}
+
+/* Escala de Grises Dark Mode theme */
+[data-theme="dark"] {
+  /* Marca y Acciones - Mantener colores de botones (Coral) */
+  --color-primary: #FF7F50;
+  --color-primary-dark: #D85217;
+  --color-primary-text: #FFFFFF;
+
+  /* Semánticos - Contraste alto */
+  --color-danger: #D32F2F;
+  --color-danger-bg: #2C2C2E;
+  --color-success: #81C784;
+  --color-warning: #FFB74D;
+
+  /* Neutros - Fondo de app #696969 y cajas #505050 */
+  --bg-primary: #505050;
+  --bg-secondary: #696969;
+  --text-primary: #FFFFFF;
+  --text-secondary: #E0E0E0;
+  --border-color: #8A8A8A;
 }
 
 * {
@@ -148,7 +172,7 @@ body {
 .btn-primary {
   border-color: var(--color-primary);
   background-color: var(--color-primary);
-  color: #FFFFFF;
+  color: var(--color-primary-text);
 }
 
 .btn-primary:hover,
@@ -276,3 +300,31 @@ body {
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   z-index: 100;
 }
+
+/* Modal and Bottom Sheet Animations */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+

@@ -1,5 +1,5 @@
 export type TableStatus = 'INACTIVE' | 'ACTIVE';
-export type OrderStatus = 'ESPERA' | 'PROCESO' | 'RETRAZO' | 'LISTO' | 'ENTREGADO';
+export type OrderStatus = 'ESPERA' | 'PROCESO' | 'RETRAZO' | 'LISTO' | 'ENTREGADO' | 'RECHAZADO';
 
 export interface Mesa {
   id: string;
@@ -9,6 +9,8 @@ export interface Mesa {
   createdAt: string;
   updatedAt: string;
   sesionIniciadaAt?: string | null;
+  atendidaPor?: string | null;
+  llamandoMesero?: boolean;
 }
 
 export interface Categoria {
@@ -36,6 +38,8 @@ export interface DetallePedido {
   createdAt: string;
   producto?: Producto;
   exclusiones?: string[];
+  rechazado?: boolean;
+  motivoRechazo?: string;
 }
 
 export interface Pedido {
@@ -46,4 +50,6 @@ export interface Pedido {
   updatedAt: string;
   detalles: DetallePedido[];
   mesa?: Mesa;
+  motivoRechazo?: string;
+  pagado?: boolean;
 }

@@ -9,6 +9,80 @@ function ClienteContent() {
   const { db, tick } = useMenuSync();
   const searchParams = useSearchParams();
 
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [startScanner, setStartScanner] = useState<boolean>(false);
+  const [manualMesaInput, setManualMesaInput] = useState<string>('');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+    setTheme(initialTheme);
+    document.documentElement.setAttribute('data-theme', initialTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    localStorage.setItem('theme', nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+  };
+
+  // Hook de inicialización del escáner de cámara real
+  useEffect(() => {
+    if (!startScanner) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let html5QrCode: any = null;
+
+    import('html5-qrcode').then(({ Html5Qrcode }) => {
+      html5QrCode = new Html5Qrcode('reader');
+      html5QrCode
+        .start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          (decodedText: string) => {
+            // Extraer ID de la mesa del código escaneado (ej: URL o string plano)
+            let mesaId = decodedText;
+            if (decodedText.includes('?mesa=')) {
+              try {
+                const url = new URL(decodedText);
+                mesaId = url.searchParams.get('mesa') || decodedText;
+              } catch (e) {
+                console.warn(e);
+              }
+            }
+
+            // Asignar el selector local, apagar el scanner
+            setMesaSelector(mesaId);
+            setStartScanner(false);
+
+            if (html5QrCode && html5QrCode.isScanning) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              html5QrCode.stop().catch((err: any) => console.warn(err));
+            }
+          },
+          () => {
+            // Fallo silencioso de lectura por frame
+          }
+        )
+        .catch((err: unknown) => {
+          console.warn(err);
+          alert('No se pudo acceder a la cámara. Asegúrese de dar los permisos necesarios.');
+          setStartScanner(false);
+        });
+    });
+
+    return () => {
+      if (html5QrCode && html5QrCode.isScanning) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        html5QrCode.stop().catch((err: any) => console.warn(err));
+      }
+    };
+  }, [startScanner]);
+
+
+
   // Obtener mesa de la URL (?mesa=3) o del selector local
   const mesaParam = searchParams.get('mesa');
   const [mesaSelector, setMesaSelector] = useState<string>('');
@@ -58,7 +132,64 @@ function ClienteContent() {
     paymentMethod: 'mercadopago' | 'transferencia' | 'efectivo';
     mesaNumero: number;
     selectedConsump: { [itemKey: string]: number };
+    meseroNombre?: string | null;
+    tipPercentage: number;
+    customTip: string;
+    fecha: string;
   } | null>(null);
+
+  // Cierre de modal con tecla Escape (Accesibilidad)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedProductInfo(null);
+        setSelectedExclusiones([]);
+      }
+    };
+    if (selectedProductInfo) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedProductInfo]);
+
+  const recomendadosCarouselRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = recomendadosCarouselRef.current;
+    if (!container) return;
+
+    const interval = setInterval(() => {
+      const total = container.children.length;
+      if (total <= 1) return;
+
+      const scrollLeft = container.scrollLeft;
+      let closestIndex = 0;
+      let minDiff = Infinity;
+
+      for (let i = 0; i < total; i++) {
+        const child = container.children[i] as HTMLElement;
+        const diff = Math.abs(child.offsetLeft - scrollLeft);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIndex = i;
+        }
+      }
+
+      const nextIndex = (closestIndex + 1) % total;
+      const nextChild = container.children[nextIndex] as HTMLElement;
+      if (nextChild) {
+        container.scrollTo({
+          left: nextChild.offsetLeft,
+          behavior: 'smooth'
+        });
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [productos, pedidos]);
+
 
   useEffect(() => {
     const tableId = mesaParam || mesaSelector;
@@ -175,14 +306,16 @@ function ClienteContent() {
     ? pedidos.filter((p) => p.mesaId === mesa.id && p.createdAt >= startSession)
     : (mesa ? pedidos.filter((p) => p.mesaId === mesa.id && p.estado !== 'ENTREGADO') : []);
 
-  // Obtener el pedido actual de esta mesa (que no esté ENTREGADO) en esta sesión
-  const pedidoActivo = mesa ? pedidosSesion.find((p) => p.estado !== 'ENTREGADO') : null;
-  // Historial de pedidos entregados de esta mesa en esta sesión
-  const historialPedidos = mesa ? pedidosSesion.filter((p) => p.estado === 'ENTREGADO') : [];
+  // Obtener el pedido actual de esta mesa (que no esté ENTREGADO ni RECHAZADO) en esta sesión
+  const pedidoActivo = mesa ? pedidosSesion.find((p) => p.estado !== 'ENTREGADO' && p.estado !== 'RECHAZADO') : null;
+  // Historial de pedidos entregados o rechazados de esta mesa en esta sesión
+  const historialPedidos = mesa ? pedidosSesion.filter((p) => p.estado === 'ENTREGADO' || p.estado === 'RECHAZADO') : [];
 
-  // Calcular total de consumos en esta sesión
+  // Calcular total de consumos impagos en esta sesión (excluyendo ya pagados, rechazados e ítems rechazados)
   const totalConsumido = pedidosSesion.reduce((total, p) => {
+    if (p.estado === 'RECHAZADO' || p.pagado) return total;
     return total + p.detalles.reduce((sub, d) => {
+      if (d.rechazado) return sub;
       const precio = getPrecioProducto(d.productoId);
       return sub + precio * d.cantidad;
     }, 0);
@@ -195,11 +328,13 @@ function ClienteContent() {
     return arrA.every(x => arrB.includes(x)) && arrB.every(x => arrA.includes(x));
   };
 
-  // Obtener lista consolidada de productos consumidos para mostrar en la factura
+  // Obtener lista consolidada de productos consumidos para mostrar en la factura (excluyendo rechazados y pagados)
   const itemsConsolidados: { productoId: string; nombre: string; cantidad: number; precio: number; exclusiones?: string[] }[] = [];
   
   pedidosSesion.forEach((p) => {
+    if (p.estado === 'RECHAZADO' || p.pagado) return;
     p.detalles.forEach((d) => {
+      if (d.rechazado) return;
       const existente = itemsConsolidados.find((x) => x.productoId === d.productoId && sonIgualesExclusiones(x.exclusiones, d.exclusiones));
       const precio = getPrecioProducto(d.productoId);
       const nombre = getNombreProducto(d.productoId);
@@ -218,7 +353,7 @@ function ClienteContent() {
   });
 
   // Obtener los recomendados (más pedidos en el local) y menú del día
-  const getRocolaItems = () => {
+  const getRecomendacionesItems = () => {
     const menuDelDia = productos.find((p) => p.id === 'prod-noquis' && p.activo);
 
     const counts: { [productoId: string]: number } = {};
@@ -268,7 +403,7 @@ function ClienteContent() {
   const personalTipAmount = totalConsumido > 0 ? (personalSubtotal / totalConsumido) * tipAmount : 0;
   const personalTotal = personalSubtotal + personalTipAmount;
 
-  const { menuDelDia, recomendados } = getRocolaItems();
+  const { menuDelDia, recomendados } = getRecomendacionesItems();
 
   const handleConfirmarPago = async () => {
     if (!mesa) return;
@@ -286,16 +421,16 @@ function ClienteContent() {
         personalTotal,
         paymentMethod,
         mesaNumero: mesa.numero,
-        selectedConsump: { ...selectedConsump }
+        selectedConsump: { ...selectedConsump },
+        meseroNombre: mesa.atendidaPor || 'Autoservicio',
+        tipPercentage,
+        customTip,
+        fecha: new Date().toLocaleString('es-AR')
       });
 
-      // Marcar todos los pedidos pendientes de la mesa como ENTREGADO
-      const pedidosDeLaMesa = pedidos.filter((p) => p.mesaId === mesa.id && p.estado !== 'ENTREGADO');
-      for (const p of pedidosDeLaMesa) {
-        await db.actualizarEstadoPedido(p.id, 'ENTREGADO');
-      }
-      // Desactivar la mesa (cierra la sesión)
-      await db.setMesaEstado(mesa.id, 'INACTIVE');
+      // Marcar todos los pedidos pendientes de la mesa como pagados en la sesión activa
+      await db.pagarPedidosDeMesa(mesa.id);
+      // NO desactivamos la mesa automáticamente aquí para permitirle al usuario decidir si continuar en ella
       setCheckoutSuccess(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al procesar el pago';
@@ -332,9 +467,10 @@ function ClienteContent() {
 
       const clone = element.cloneNode(true) as HTMLElement;
       clone.style.display = 'block';
-      clone.style.position = 'absolute';
-      clone.style.left = '-9999px';
-      clone.style.top = '0';
+      clone.style.position = 'fixed';
+      clone.style.left = '0px';
+      clone.style.top = '0px';
+      clone.style.zIndex = '-9999';
       clone.style.width = '80mm';
       clone.style.background = '#ffffff';
       clone.style.color = '#000000';
@@ -374,53 +510,101 @@ function ClienteContent() {
   // 1. PANTALLA DE SIMULACIÓN DE ESCANEO QR (SI NO HAY MESA ACTIVA)
   if (!mesa) {
     return (
-      <div className="mobile-wrapper" style={{ padding: '1rem', justifyContent: 'center' }}>
-        <header className="app-header" style={{ borderBottom: 'none', background: 'transparent', padding: '1rem 0' }}>
-          <h1 className="app-title" style={{ fontSize: '1.8rem', textAlign: 'center', width: '100%' }}>
+      <div className="mobile-wrapper min-h-screen flex flex-col justify-center p-4 transition-colors duration-500" style={{ backgroundColor: '#FF7F50' }}>
+        <header className="app-header" style={{ borderBottom: 'none', background: 'transparent', padding: '1rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ width: '32px' }}></div>
+          <h1 className="app-title" style={{ fontSize: '1.8rem', textAlign: 'center', flex: 1, color: '#FFFFFF' }}>
             📱 Escaneo QR Menú Digital
           </h1>
+          <button
+            className="btn btn-secondary"
+            onClick={toggleTheme}
+            style={{ padding: '0.3rem 0.5rem', fontSize: '0.85rem', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', borderColor: 'transparent' }}
+            title="Cambiar Tema"
+            aria-label="Cambiar tema visual"
+          >
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
         </header>
 
-        <div className="app-content" style={{ justifyContent: 'center', alignItems: 'center', gap: '1.5rem' }}>
-          <div className="card" style={{ width: '100%', padding: '1.5rem', boxShadow: '0 8px 30px rgba(0,0,0,0.06)' }}>
-            <h2 className="card-title" style={{ fontSize: '1.2rem', marginBottom: '0.5rem', textAlign: 'center' }}>
-              Simulador de Salón (Mesas 1-9)
-            </h2>
-            <p className="card-desc" style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-              Seleccione la mesa que desea emular haber escaneado con su teléfono:
-            </p>
+        <main className="app-content relative min-h-[380px] flex items-center justify-center" style={{ padding: 0 }}>
+          <div className="card w-full p-8 shadow-xl bg-white dark:bg-zinc-900 rounded-2xl relative overflow-hidden transition-all duration-500">
+            
+            {/* 1. Modo Normal: Cartel de Bienvenida */}
+            {!startScanner ? (
+              <div className="flex flex-col items-center justify-center text-center gap-4">
+                <span role="img" aria-hidden="true" className="text-6xl">🍽️</span>
+                <h2 className="text-2xl font-extrabold text-gray-900 dark:text-gray-100">
+                  ¡Te damos la Bienvenida!
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-xs">
+                  Disfruta de la mejor experiencia gastronómica. Escanea el código QR de tu mesa para realizar tu pedido.
+                </p>
+                
+                <button
+                  className="btn btn-primary mt-2 w-full py-3 text-base font-bold shadow-lg shadow-orange-500/20"
+                  onClick={() => setStartScanner(true)}
+                >
+                  <span role="img" aria-hidden="true">📷</span> Escanear Código QR <span role="img" aria-hidden="true">🚀</span>
+                </button>
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '0.75rem'
-            }}>
-              {Array.from({ length: 9 }).map((_, i) => {
-                const num = i + 1;
-                return (
-                  <button
-                    key={num}
-                    className="btn btn-secondary"
-                    onClick={() => setMesaSelector(`mesa-${num}`)}
-                    style={{
-                      padding: '0.8rem 0',
-                      fontWeight: 'bold',
-                      fontSize: '0.95rem',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: 'var(--border-radius-md)'
-                    }}
-                  >
-                    Mesa {num}
-                  </button>
-                );
-              })}
-            </div>
+                {/* Fallback de ingreso manual */}
+                <div className="w-full border-t border-gray-100 dark:border-zinc-800 pt-5 mt-2 flex flex-col gap-2">
+                  <label htmlFor="manual-mesa-input" className="text-xs text-gray-500 dark:text-gray-400">O ingresa el número de mesa manualmente:</label>
+                  <div className="flex gap-2 w-full">
+                    <input
+                      id="manual-mesa-input"
+                      type="number"
+                      min="1"
+                      max="9"
+                      value={manualMesaInput}
+                      onChange={(e) => setManualMesaInput(e.target.value)}
+                      placeholder="Ej. 3"
+                      className="flex-1 px-3 py-2 border border-gray-200 dark:border-zinc-800 rounded-xl text-sm font-bold dark:bg-zinc-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-orange-500 focus-visible:ring-2 focus-visible:ring-orange-500"
+                    />
+                    <button
+                      onClick={() => {
+                        if (!manualMesaInput.trim()) return;
+                        setMesaSelector(`mesa-${manualMesaInput.trim()}`);
+                      }}
+                      className="btn btn-primary text-xs px-4 font-bold"
+                    >
+                      Ingresar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* 2. Modo Escáner Activo */
+              <div className="flex flex-col items-center gap-4 w-full">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 text-center">
+                  Apunta al Código QR
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                  Ubica el código QR de la mesa dentro del visor de escaneo.
+                </p>
+                
+                {/* Visor de Cámara */}
+                <div className="w-full max-w-[280px] aspect-square bg-black rounded-2xl overflow-hidden border-2 border-orange-500 relative shadow-inner">
+                  <div id="reader" className="w-full h-full"></div>
+                  
+                  {/* Guías de escaneo */}
+                  <div className="absolute inset-4 border border-dashed border-orange-500/50 rounded-xl pointer-events-none flex items-center justify-center">
+                    <div className="w-[85%] h-0.5 bg-orange-500/80 animate-pulse absolute"></div>
+                  </div>
+                </div>
 
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '1.5rem', textAlign: 'center', fontStyle: 'italic' }}>
-              * Tip: También puede forzar una mesa en la URL: <code>?mesa=mesa-3</code>
-            </p>
+                <button
+                  onClick={() => setStartScanner(false)}
+                  className="btn btn-secondary text-xs px-6 py-2 border border-gray-200 dark:border-zinc-800 rounded-xl w-full mt-2"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
+            
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -431,16 +615,26 @@ function ClienteContent() {
       <div className="mobile-wrapper" style={{ padding: '1rem' }}>
         <header className="app-header" style={{ borderBottom: 'none' }}>
           <h1 className="app-title">Mesa {mesa.numero}</h1>
-          <button
-            className="btn btn-secondary"
-            onClick={() => {
-              setMesaSelector('');
-              window.history.pushState({}, '', '/');
-            }}
-            style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
-          >
-            Salir
-          </button>
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={toggleTheme}
+              style={{ padding: '0.3rem 0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}
+              title="Cambiar Tema"
+            >
+              {theme === 'light' ? '🌙' : '☀️'}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setMesaSelector('');
+                window.history.pushState({}, '', '/');
+              }}
+              style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
+            >
+              Salir
+            </button>
+          </div>
         </header>
 
         <div className="app-content" style={{ justifyContent: 'center', textAlign: 'center' }}>
@@ -475,7 +669,11 @@ function ClienteContent() {
         personalTotal: 0,
         paymentMethod: 'mercadopago' as const,
         mesaNumero: mesa.numero,
-        selectedConsump: {}
+        selectedConsump: {},
+        meseroNombre: 'Autoservicio',
+        tipPercentage: 10,
+        customTip: '',
+        fecha: new Date().toLocaleString('es-AR')
       };
 
       return (
@@ -554,11 +752,11 @@ function ClienteContent() {
                 👥 Tu total personal (por consumo): ${summary.personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             )}
-            <p className="card-desc" style={{ fontSize: '0.85rem' }}>
-              La mesa ha sido cerrada correctamente. ¡Muchas gracias por tu visita!
+             <p className="card-desc" style={{ fontSize: '0.85rem', textAlign: 'center' }}>
+              La sesión de tu mesa sigue activa por si deseas agregar algo más. ¿Qué deseas hacer ahora?
             </p>
-
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
+ 
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
               <button
                 onClick={descargarTicketPDF}
                 className="btn btn-secondary"
@@ -566,13 +764,38 @@ function ClienteContent() {
               >
                 📥 Descargar Ticket PDF
               </button>
+ 
+              <button
+                onClick={() => {
+                  setCheckoutSuccess(false);
+                  setPaymentSummary(null);
+                  setCart({});
+                  setCurrentView('menu');
+                  setSplitPeopleCount(1);
+                  setSplitMode('equal');
+                  setSelectedConsump({});
+                  alert('¡Ya puedes seguir agregando más cosas!');
+                }}
+                className="btn btn-primary"
+                style={{ width: '100%', backgroundColor: 'var(--color-success)', borderColor: 'var(--color-success)', color: '#FFFFFF' }}
+              >
+                🍰 Seguir Pidiendo (Postres, Café, etc.)
+              </button>
 
               <button
-                onClick={handleVolverAlInicio}
-                className="btn btn-primary"
-                style={{ width: '100%', backgroundColor: 'var(--color-primary)', borderColor: 'var(--color-primary)' }}
+                onClick={async () => {
+                  try {
+                    await db.setMesaEstado(mesa.id, 'INACTIVE');
+                    handleVolverAlInicio();
+                  } catch (err) {
+                    console.error(err);
+                    alert('Error al cerrar la sesión');
+                  }
+                }}
+                className="btn btn-secondary"
+                style={{ width: '100%', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
               >
-                Volver al Inicio
+                🚪 Cerrar Sesión y Salir
               </button>
             </div>
           </div>
@@ -583,7 +806,13 @@ function ClienteContent() {
               <h2 style={{ margin: '0 0 0.25rem 0', fontSize: '16px', fontWeight: 'bold' }}>🍽️ MENÚ DIGITAL</h2>
               <p style={{ margin: '0', fontSize: '12px' }}>RESTAURANTE & BAR</p>
               <p style={{ margin: '0.25rem 0 0 0', fontSize: '11px', color: '#555' }}>
-                Mesa #{summary.mesaNumero} | Fecha: {new Date().toLocaleDateString('es-AR')} {new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                Mesa #{summary.mesaNumero}
+              </p>
+              <p style={{ margin: '0.1rem 0 0 0', fontSize: '11px', color: '#555' }}>
+                Atendido por: {summary.meseroNombre || 'Autoservicio'}
+              </p>
+              <p style={{ margin: '0.1rem 0 0 0', fontSize: '11px', color: '#555' }}>
+                Fecha: {summary.fecha}
               </p>
             </div>
 
@@ -613,7 +842,7 @@ function ClienteContent() {
                 <span>${summary.totalConsumido.toLocaleString('es-AR')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Propina Mesa ({summary.paymentMethod === 'efectivo' ? 'Efectivo' : summary.paymentMethod}):</span>
+                <span>Propina Mesa ({summary.tipPercentage === 0 ? '0%' : summary.tipPercentage === 10 ? '10%' : summary.tipPercentage === 15 ? '15%' : 'Personalizada'}):</span>
                 <span>${summary.tipAmount.toLocaleString('es-AR')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px', borderTop: '1px solid #000', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
@@ -622,49 +851,60 @@ function ClienteContent() {
               </div>
             </div>
 
-            {summary.splitMode === 'equal' && summary.splitPeopleCount > 1 && (
-              <div style={{ border: '1px solid #000', padding: '0.5rem', marginBottom: '1rem', textAlign: 'center', fontSize: '11px' }}>
-                <strong>Cuenta Dividida (Por Igual)</strong>
-                <div>Comensales: {summary.splitPeopleCount}</div>
-                <div>Pago por persona: ${(summary.totalConPropina / summary.splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              </div>
-            )}
-
-            {summary.splitMode === 'consumption' && summary.personalSubtotal > 0 && (
-              <div style={{ border: '1px solid #000', padding: '0.5rem', marginBottom: '1rem', fontSize: '11px', backgroundColor: '#fcfcfc' }}>
-                <div style={{ textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid #000', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
-                  TICKET INDIVIDUAL (POR CONSUMO)
+            {/* Detalles de División de Cuenta */}
+            <div style={{ borderTop: '1px dashed #000', paddingTop: '0.5rem', marginBottom: '1rem', fontSize: '11px' }}>
+              <strong style={{ display: 'block', marginBottom: '0.25rem' }}>¿Cuenta Dividida?:</strong>
+              {summary.splitPeopleCount === 1 ? (
+                <div>No (Pago de cuenta completa)</div>
+              ) : summary.splitMode === 'equal' ? (
+                <div style={{ border: '1px solid #000', padding: '0.5rem', textAlign: 'center', marginTop: '0.25rem' }}>
+                  <strong>Sí (Equitativa - por igual)</strong>
+                  <div>Comensales: {summary.splitPeopleCount}</div>
+                  <div>Pago por persona: ${(summary.totalConPropina / summary.splitPeopleCount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
-                {summary.itemsConsolidados.map((item, idx) => {
-                  const key = getCartKey(item.productoId, item.exclusiones);
-                  const qty = summary.selectedConsump[key] || 0;
-                  if (qty === 0) return null;
-                  return (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
-                      <span>{item.nombre} x{qty}</span>
-                      <span>${(item.precio * qty).toLocaleString('es-AR')}</span>
+              ) : (
+                <div style={{ border: '1px solid #000', padding: '0.5rem', marginTop: '0.25rem', backgroundColor: '#fcfcfc' }}>
+                  <div style={{ textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid #000', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
+                    Sí (Por Consumo Individual)
+                  </div>
+                  {summary.itemsConsolidados.map((item, idx) => {
+                    const key = getCartKey(item.productoId, item.exclusiones);
+                    const qty = summary.selectedConsump[key] || 0;
+                    if (qty === 0) return null;
+                    return (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
+                        <span>{item.nombre} x{qty}</span>
+                        <span>${(item.precio * qty).toLocaleString('es-AR')}</span>
+                      </div>
+                    );
+                  })}
+                  <div style={{ borderTop: '1px dashed #000', paddingTop: '0.25rem', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Subtotal Personal:</span>
+                      <span>${summary.personalSubtotal.toLocaleString('es-AR')}</span>
                     </div>
-                  );
-                })}
-                <div style={{ borderTop: '1px dashed #000', paddingTop: '0.25rem', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Subtotal Personal:</span>
-                    <span>${summary.personalSubtotal.toLocaleString('es-AR')}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Propina Personal (Prop.):</span>
-                    <span>${summary.personalTipAmount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                    <span>Total Personal:</span>
-                    <span>${summary.personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Propina Personal:</span>
+                      <span>${summary.personalTipAmount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                      <span>Total Personal:</span>
+                      <span>${summary.personalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             <div style={{ borderTop: '1px dashed #000', paddingTop: '0.5rem', textAlign: 'center', fontSize: '11px' }}>
-              <p style={{ margin: '0 0 0.25rem 0' }}><strong>Método de Pago:</strong> {summary.paymentMethod === 'mercadopago' ? 'Mercado Pago' : summary.paymentMethod === 'transferencia' ? 'Transferencia' : 'Efectivo'}</p>
+              <p style={{ margin: '0 0 0.25rem 0' }}>
+                <strong>Método de Pago:</strong>{' '}
+                {summary.paymentMethod === 'mercadopago'
+                  ? 'Mercado Pago (Tarjeta/QR Simulado)'
+                  : summary.paymentMethod === 'transferencia'
+                    ? 'Transferencia Bancaria (Alias: menu.digital.mp)'
+                    : 'Efectivo (Pagado en Caja/Mesa)'}
+              </p>
               <p style={{ margin: '0', fontStyle: 'italic' }}>¡Muchas gracias por su visita!</p>
             </div>
           </div>
@@ -694,7 +934,14 @@ function ClienteContent() {
             ← Volver
           </button>
           <strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>Mesa #{mesa.numero} • Factura</strong>
-          <div style={{ width: '50px' }}></div>
+          <button
+            className="btn btn-secondary"
+            onClick={toggleTheme}
+            style={{ padding: '0.3rem 0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}
+            title="Cambiar Tema"
+          >
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
         </header>
 
         {/* Detalle consolidado de productos */}
@@ -1053,161 +1300,8 @@ function ClienteContent() {
     );
   }
 
-  // 3b. PANTALLA DETALLE DE PRODUCTO (INGREDIENTES)
-  if (selectedProductInfo) {
-    return (
-      <div className="mobile-wrapper" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', minHeight: '100vh', backgroundColor: 'var(--bg-secondary)' }}>
-        
-        {/* Header de ingredientes */}
-        <header className="app-header" style={{ position: 'static', backgroundColor: 'transparent', padding: '0.5rem 0', borderBottom: 'none' }}>
-          <button
-            onClick={() => setSelectedProductInfo(null)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.25rem'
-            }}
-          >
-            ← Volver
-          </button>
-          <strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>Detalle de Plato</strong>
-          <div style={{ width: '50px' }}></div>
-        </header>
+  // 3b. PANTALLA DETALLE DE PRODUCTO (INGREDIENTES) - RENDERS AS AN OVERLAY MODAL NOW
 
-        {/* Card Principal de Info */}
-        <div className="card" style={{ padding: '0px', overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-primary)' }}>
-          {selectedProductInfo.imagenUrl && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={selectedProductInfo.imagenUrl.replace('w=150', 'w=600')}
-              alt={selectedProductInfo.nombre}
-              style={{
-                width: '100%',
-                height: '240px',
-                objectFit: 'cover',
-                borderBottom: '1px solid var(--border-color)'
-              }}
-            />
-          )}
-
-          <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div className="flex-between">
-              <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-                {selectedProductInfo.nombre}
-              </h2>
-              <span style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--color-primary)' }}>
-                ${selectedProductInfo.precio.toLocaleString('es-AR')}
-              </span>
-            </div>
-
-            {selectedProductInfo.descripcion && (
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
-                {selectedProductInfo.descripcion}
-              </p>
-            )}
-
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '0.5rem' }}>
-              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                📋 Personalizar Ingredientes
-              </h3>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '0.25rem' }}>
-                <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', margin: '0 0 0.25rem 0', fontStyle: 'italic' }}>
-                  * Desmarque los ingredientes que desee excluir del plato:
-                </p>
-                {selectedProductInfo.ingredientes?.map((ing, index) => {
-                  const isExcluded = selectedExclusiones.includes(ing);
-                  return (
-                    <label
-                      key={index}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.55rem',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem',
-                        userSelect: 'none'
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={!isExcluded}
-                        onChange={() => {
-                          if (isExcluded) {
-                            setSelectedExclusiones((prev) => prev.filter((x) => x !== ing));
-                          } else {
-                            setSelectedExclusiones((prev) => [...prev, ing]);
-                          }
-                        }}
-                        style={{
-                          width: '16px',
-                          height: '16px',
-                          accentColor: 'var(--color-primary)'
-                        }}
-                      />
-                      <span style={{
-                        color: isExcluded ? 'var(--text-secondary)' : 'var(--text-primary)',
-                        textDecoration: isExcluded ? 'line-through' : 'none',
-                        fontWeight: isExcluded ? 500 : 600
-                      }}>
-                        {limpiarIngrediente(ing)}
-                        {isExcluded && (
-                          <span style={{ marginLeft: '0.35rem', fontSize: '0.72rem', color: 'var(--color-danger)', fontWeight: 700 }}>
-                            (Excluido ❌)
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Botones de acción al final */}
-        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <button
-            onClick={() => {
-              updateCartQty(selectedProductInfo.id, 1, selectedExclusiones);
-              setSelectedProductInfo(null);
-              alert('¡Plato personalizado agregado al carrito!');
-            }}
-            className="btn"
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              fontSize: '0.95rem',
-              fontWeight: 700,
-              backgroundColor: 'var(--color-primary)',
-              borderColor: 'var(--color-primary)',
-              color: '#FFFFFF'
-            }}
-          >
-            🛒 Agregar al Pedido
-          </button>
-          
-          <button
-            onClick={() => setSelectedProductInfo(null)}
-            className="btn btn-secondary"
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              fontSize: '0.85rem'
-            }}
-          >
-            Volver a la Carta
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // 4. WIDGET DE TIEMPOS DE ESPERA SEMÁNTICO
   const renderTimerWidget = () => {
@@ -1252,16 +1346,48 @@ function ClienteContent() {
           </h1>
           <p className="app-subtitle" style={{ fontSize: '0.75rem' }}>Menú Digital Autoservicio</p>
         </div>
-        <button
-          className="btn btn-secondary"
-          onClick={() => {
-            setMesaSelector('');
-            window.history.pushState({}, '', '/');
-          }}
-          style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
-        >
-          Cambiar Mesa
-        </button>
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={toggleTheme}
+            style={{ padding: '0.3rem 0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}
+            title="Cambiar Tema"
+            aria-label="Cambiar tema visual"
+          >
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
+          <button
+            className="btn"
+            onClick={async () => {
+              if (!mesa) return;
+              const nextVal = !mesa.llamandoMesero;
+              await db.llamarMesero(mesa.id, nextVal);
+              alert(nextVal ? 'Llamando al mesero... Te atenderá pronto.' : 'Llamada cancelada.');
+            }}
+            style={{
+              padding: '0.3rem 0.6rem',
+              fontSize: '0.75rem',
+              backgroundColor: mesa.llamandoMesero ? 'var(--color-primary)' : 'var(--bg-secondary)',
+              borderColor: mesa.llamandoMesero ? 'var(--color-primary)' : 'var(--border-color)',
+              color: mesa.llamandoMesero ? '#FFFFFF' : 'var(--text-primary)',
+              cursor: 'pointer'
+            }}
+            aria-label={mesa.llamandoMesero ? "Cancelar llamada al mesero" : "Llamar al mesero"}
+          >
+            {mesa.llamandoMesero ? '✋ Llamando...' : '🙋‍♂️ Llamar'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              setMesaSelector('');
+              window.history.pushState({}, '', '/');
+            }}
+            style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', cursor: 'pointer' }}
+            aria-label="Volver a seleccionar mesa"
+          >
+            Cambiar Mesa
+          </button>
+        </div>
       </header>
 
       {/* Selector de Vistas de Pestaña */}
@@ -1299,21 +1425,25 @@ function ClienteContent() {
         {/* VISTA A: NAVEGAR MENÚ Y AÑADIR A CARRO */}
         {currentView === 'menu' && (
           <>
-              {/* LA ROCOLA DE RECOMENDADOS Y MENÚ DEL DÍA */}
+              {/* RECOMENDACIONES Y MENÚ DEL DÍA */}
               <section style={{ marginBottom: '1.25rem' }}>
                 <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  🎵 La Rocola de Recomendaciones
+                  ⭐ Recomendaciones
                 </h3>
                 
-                <div style={{
-                  display: 'flex',
-                  gap: '0.75rem',
-                  overflowX: 'auto',
-                  paddingBottom: '0.5rem',
-                  scrollbarWidth: 'none',
-                  msOverflowStyle: 'none',
-                  scrollSnapType: 'x mandatory'
-                }}>
+                <div 
+                  ref={recomendadosCarouselRef}
+                  style={{
+                    display: 'flex',
+                    gap: '0.75rem',
+                    overflowX: 'auto',
+                    paddingBottom: '0.5rem',
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none',
+                    scrollSnapType: 'x mandatory',
+                    position: 'relative'
+                  }}
+                >
                   {/* 1. Tarjeta de Menú del Día */}
                   {menuDelDia && (
                     <div
@@ -1321,7 +1451,7 @@ function ClienteContent() {
                         flex: '0 0 82%',
                         scrollSnapAlign: 'start',
                         borderRadius: 'var(--border-radius-md)',
-                        background: 'linear-gradient(135deg, #FFF9F5 0%, #FFF0E6 100%)',
+                        background: theme === 'dark' ? 'linear-gradient(135deg, #5A5A5A 0%, #484848 100%)' : 'linear-gradient(135deg, #FFF9F5 0%, #FFF0E6 100%)',
                         border: '1.5px solid var(--color-primary)',
                         padding: '0.85rem',
                         display: 'flex',
@@ -1383,6 +1513,8 @@ function ClienteContent() {
                                 padding: 0,
                                 lineHeight: 1
                               }}
+                              aria-label={`Ver ingredientes y personalizar ${menuDelDia.nombre}`}
+                              aria-haspopup="dialog"
                             >
                               !
                             </button>
@@ -1484,6 +1616,8 @@ function ClienteContent() {
                                 padding: 0,
                                 lineHeight: 1
                               }}
+                              aria-label={`Ver ingredientes y personalizar ${prod.nombre}`}
+                              aria-haspopup="dialog"
                             >
                               !
                             </button>
@@ -1607,6 +1741,8 @@ function ClienteContent() {
                                     margin: 0
                                   }}
                                   title="Ver ingredientes"
+                                  aria-label={`Ver ingredientes y personalizar ${prod.nombre}`}
+                                  aria-haspopup="dialog"
                                 >
                                   !
                                 </button>
@@ -1710,16 +1846,26 @@ function ClienteContent() {
                     return (
                       <div key={det.id} className="flex-between" style={{ padding: '0.5rem 0', borderBottom: '1px dashed var(--border-color)' }}>
                         <div>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                            {det.producto?.nombre} <strong style={{ color: 'var(--color-primary)' }}>x{det.cantidad}</strong>
+                          <span style={{
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            textDecoration: det.rechazado ? 'line-through' : 'none',
+                            color: det.rechazado ? 'var(--text-secondary)' : 'var(--text-primary)'
+                          }}>
+                            {det.producto?.nombre} <strong style={{ color: det.rechazado ? 'var(--text-secondary)' : 'var(--color-primary)' }}>x{det.cantidad}</strong>
                           </span>
                           {det.exclusiones && det.exclusiones.length > 0 && (
                             <div style={{ fontSize: '0.75rem', color: 'var(--color-danger)', fontWeight: 600, marginTop: '0.1rem' }}>
                               ❌ Sin: {det.exclusiones.map(limpiarIngrediente).join(', ')}
                             </div>
                           )}
-                          <div style={{ fontSize: '0.7rem', color: det.entregado ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: 500, marginTop: '0.15rem' }}>
-                            {det.entregado ? '✓ Servido en Mesa' : '⏳ En preparación...'}
+                          <div style={{
+                            fontSize: '0.7rem',
+                            color: det.rechazado ? 'var(--color-danger)' : (det.entregado ? 'var(--color-success)' : 'var(--text-secondary)'),
+                            fontWeight: 500,
+                            marginTop: '0.15rem'
+                          }}>
+                            {det.rechazado ? `❌ Rechazado por Cocina: ${det.motivoRechazo || 'Sin stock'}` : (det.entregado ? '✓ Servido en Mesa' : '⏳ En preparación...')}
                           </div>
                         </div>
                         
@@ -1809,17 +1955,47 @@ function ClienteContent() {
             {historialPedidos.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>🛍️ Consumo Servido</h3>
-                {historialPedidos.map((hp) => (
-                  <div key={hp.id} className="card" style={{ opacity: 0.75, padding: '0.65rem' }}>
-                    <div className="flex-between" style={{ fontSize: '0.8rem' }}>
-                      <strong>Pedido #{hp.id.substring(4)} (Entregado)</strong>
-                      <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>✓ Servido</span>
+                {historialPedidos.map((hp) => {
+                  const isRechazado = hp.estado === 'RECHAZADO';
+                  return (
+                    <div
+                      key={hp.id}
+                      className="card"
+                      style={{
+                        opacity: 0.75,
+                        padding: '0.65rem',
+                        backgroundColor: isRechazado ? 'rgba(211, 47, 47, 0.04)' : 'var(--bg-primary)',
+                        border: isRechazado ? '1px solid var(--color-danger)' : '1px solid var(--border-color)'
+                      }}
+                    >
+                      <div className="flex-between" style={{ fontSize: '0.8rem' }}>
+                        <strong>Pedido #{hp.id.substring(4)}</strong>
+                        <span style={{ color: isRechazado ? 'var(--color-danger)' : 'var(--color-success)', fontWeight: 'bold' }}>
+                          {isRechazado ? '❌ Rechazado' : (hp.pagado ? '💰 Pagado' : '✓ Servido')}
+                        </span>
+                      </div>
+                      {isRechazado && hp.motivoRechazo && (
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)', fontWeight: 600, marginTop: '0.1rem' }}>
+                          Motivo: {hp.motivoRechazo}
+                        </div>
+                      )}
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                        {hp.detalles.map((d) => {
+                          const itemText = `${d.producto?.nombre} x${d.cantidad}`;
+                          return d.rechazado ? (
+                            <span key={d.id} style={{ textDecoration: 'line-through', color: 'var(--color-danger)', marginRight: '8px', display: 'inline-block' }}>
+                              {itemText} (Rechazado: {d.motivoRechazo || 'sin stock'})
+                            </span>
+                          ) : (
+                            <span key={d.id} style={{ marginRight: '8px', display: 'inline-block' }}>
+                              {itemText}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                      {hp.detalles.map(d => `${d.producto?.nombre} x${d.cantidad}`).join(', ')}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -1899,6 +2075,161 @@ function ClienteContent() {
             >
               Pedir
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3b. MODAL DETALLE DE PRODUCTO (INGREDIENTES) */}
+      {selectedProductInfo && (
+        <div 
+          className="fixed inset-0 z-[110] flex items-end justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+          onClick={() => {
+            setSelectedProductInfo(null);
+            setSelectedExclusiones([]);
+          }}
+        >
+          <div 
+            className="w-full max-w-[480px] bg-white dark:bg-zinc-900 rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: 'var(--bg-primary)',
+              borderTop: '1px solid var(--border-color)',
+            }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="product-details-title"
+          >
+            {/* Control handle para bottom sheet */}
+            <div 
+              className="flex justify-center py-2.5 cursor-pointer" 
+              onClick={() => {
+                setSelectedProductInfo(null);
+                setSelectedExclusiones([]);
+              }}
+              role="button"
+              aria-label="Cerrar detalles de plato"
+            >
+              <div className="w-12 h-1.5 bg-gray-300 dark:bg-zinc-700 rounded-full"></div>
+            </div>
+
+            {/* Header / Titulo */}
+            <div className="px-5 pb-3 flex justify-between items-center border-b border-gray-100 dark:border-zinc-800">
+              <span className="text-lg font-bold text-gray-900 dark:text-gray-100">Detalle de Plato</span>
+              <button 
+                onClick={() => {
+                  setSelectedProductInfo(null);
+                  setSelectedExclusiones([]);
+                }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl font-bold p-1"
+                aria-label="Cerrar detalles de plato"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Content wrapper */}
+            <div className="overflow-y-auto flex-1 p-5 flex flex-col gap-4" style={{ scrollbarWidth: 'thin' }}>
+              {selectedProductInfo.imagenUrl && (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={selectedProductInfo.imagenUrl.replace('w=150', 'w=600')}
+                  alt={selectedProductInfo.nombre}
+                  className="w-full h-48 object-cover rounded-2xl border border-gray-100 dark:border-zinc-800"
+                />
+              )}
+
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 id="product-details-title" className="text-xl font-extrabold text-gray-900 dark:text-gray-100 leading-tight">
+                    {selectedProductInfo.nombre}
+                  </h2>
+                  {selectedProductInfo.descripcion && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">
+                      {selectedProductInfo.descripcion}
+                    </p>
+                  )}
+                </div>
+                <span className="text-lg font-black text-orange-500 dark:text-orange-400 shrink-0 ml-4">
+                  ${selectedProductInfo.precio.toLocaleString('es-AR')}
+                </span>
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-zinc-800 pt-4 mt-2">
+                <h3 className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider mb-2">
+                  📋 Personalizar Ingredientes
+                </h3>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">
+                  * Desmarca los ingredientes que deseas excluir del plato:
+                </p>
+                <div className="flex flex-col gap-3">
+                  {selectedProductInfo.ingredientes?.map((ing, index) => {
+                    const isExcluded = selectedExclusiones.includes(ing);
+                    return (
+                      <label
+                        key={index}
+                        className="flex items-center gap-3 cursor-pointer text-sm select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!isExcluded}
+                          onChange={() => {
+                            if (isExcluded) {
+                              setSelectedExclusiones((prev) => prev.filter((x) => x !== ing));
+                            } else {
+                              setSelectedExclusiones((prev) => [...prev, ing]);
+                            }
+                          }}
+                          className="w-4 h-4 rounded text-orange-500 border-gray-300 dark:border-zinc-700 focus:ring-orange-500 dark:bg-zinc-800"
+                          style={{ accentColor: 'var(--color-primary)' }}
+                        />
+                        <span className={`transition-all ${
+                          isExcluded 
+                            ? 'text-gray-400 dark:text-gray-600 line-through' 
+                            : 'text-gray-800 dark:text-gray-200 font-medium'
+                        }`}>
+                          {limpiarIngrediente(ing)}
+                          {isExcluded && (
+                            <span className="ml-2 text-[10px] text-red-500 font-bold uppercase">
+                              (Excluido ❌)
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer de Acciones del Modal */}
+            <div className="p-5 border-t border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900/50 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  updateCartQty(selectedProductInfo.id, 1, selectedExclusiones);
+                  setSelectedProductInfo(null);
+                  setSelectedExclusiones([]);
+                  alert('¡Plato personalizado agregado al carrito!');
+                }}
+                className="w-full btn btn-primary py-3 font-bold text-sm shadow-md"
+                style={{
+                  backgroundColor: 'var(--color-primary)',
+                  borderColor: 'var(--color-primary)',
+                  color: '#FFFFFF'
+                }}
+              >
+                🛒 Agregar al Pedido
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedProductInfo(null);
+                  setSelectedExclusiones([]);
+                }}
+                className="w-full btn btn-secondary py-2 text-xs font-semibold"
+              >
+                Volver a la Carta
+              </button>
+            </div>
+
           </div>
         </div>
       )}

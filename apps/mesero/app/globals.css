@@ -2,6 +2,7 @@
   /* Marca y Acciones */
   --color-primary: #F26A2E;
   --color-primary-dark: #D85217;
+  --color-primary-text: #FFFFFF;
 
   /* Semánticos */
   --color-danger: #D32F2F;
@@ -25,6 +26,27 @@
   --spacing-sm: 0.5rem;
   --spacing-md: 1rem;
   --spacing-lg: 1.5rem;
+}
+
+/* Escala de Grises Dark Mode theme */
+[data-theme="dark"] {
+  /* Marca y Acciones - Escala de Grises */
+  --color-primary: #F2F2F7;
+  --color-primary-dark: #D1D1D6;
+  --color-primary-text: #121212;
+
+  /* Semánticos - Escala de Grises */
+  --color-danger: #8E8E93;
+  --color-danger-bg: #2C2C2E;
+  --color-success: #E5E5EA;
+  --color-warning: #C7C7CC;
+
+  /* Neutros */
+  --bg-primary: #1C1C1E;
+  --bg-secondary: #121212;
+  --text-primary: #F2F2F7;
+  --text-secondary: #8E8E93;
+  --border-color: #2C2C2E;
 }
 
 * {
@@ -148,7 +170,7 @@ body {
 .btn-primary {
   border-color: var(--color-primary);
   background-color: var(--color-primary);
-  color: #FFFFFF;
+  color: var(--color-primary-text);
 }
 
 .btn-primary:hover,

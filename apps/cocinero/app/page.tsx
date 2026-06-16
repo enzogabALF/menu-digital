@@ -6,6 +6,24 @@ import { Pedido, Mesa, OrderStatus } from '@repo/database';
 
 export default function CocineroPage() {
   const { db, tick } = useMenuSync();
+
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+    setTheme(initialTheme);
+    document.documentElement.setAttribute('data-theme', initialTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    localStorage.setItem('theme', nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+  };
+
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [selectedMesaId, setSelectedMesaId] = useState<string | null>(null);
@@ -44,6 +62,38 @@ export default function CocineroPage() {
     }
   };
 
+  const handleRechazarPedido = async (pedidoId: string) => {
+    const motivo = prompt('Ingrese el motivo del rechazo para todo el pedido (ej: Falta de stock, corte de luz):');
+    if (motivo === null) return;
+    if (!motivo.trim()) {
+      alert('Debe ingresar un motivo para rechazar el pedido.');
+      return;
+    }
+
+    try {
+      await db.rechazarPedido(pedidoId, motivo.trim());
+      alert('Pedido rechazado con éxito.');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error al rechazar el pedido');
+    }
+  };
+
+  const handleRechazarPlato = async (pedidoId: string, detalleId: string) => {
+    const motivo = prompt('Ingrese el motivo de rechazo del plato (ej: Sin stock de carne):');
+    if (motivo === null) return;
+    if (!motivo.trim()) {
+      alert('Debe ingresar un motivo para rechazar el plato.');
+      return;
+    }
+
+    try {
+      await db.rechazarDetallePedido(pedidoId, detalleId, motivo.trim());
+      alert('Plato rechazado con éxito.');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error al rechazar el plato');
+    }
+  };
+
   const getMesaNumero = (mesaId: string) => {
     return mesas.find((m) => m.id === mesaId)?.numero || '?';
   };
@@ -72,7 +122,7 @@ export default function CocineroPage() {
 
   // Obtener pedido activo para una mesa (no entregado)
   const getActiveOrder = (mesaId: string) => {
-    return pedidos.find((p) => p.mesaId === mesaId && p.estado !== 'ENTREGADO');
+    return pedidos.find((p) => p.mesaId === mesaId && p.estado !== 'ENTREGADO' && p.estado !== 'RECHAZADO');
   };
 
   // Reportar o quitar retraso de la mesa seleccionada
@@ -90,8 +140,8 @@ export default function CocineroPage() {
   // Listar mesas activas en el salón
   const activeMesas = mesas.filter((m) => m.estado === 'ACTIVE');
 
-  // Filtrar pedidos activos (no entregados)
-  const activePedidos = pedidos.filter((p) => p.estado !== 'ENTREGADO');
+  // Filtrar pedidos activos (no entregados ni rechazados)
+  const activePedidos = pedidos.filter((p) => p.estado !== 'ENTREGADO' && p.estado !== 'RECHAZADO');
 
   // Clasificación para columnas Kanban en la parte derecha
   const pedidosEspera = activePedidos.filter((p) => p.estado === 'ESPERA');
@@ -132,6 +182,14 @@ export default function CocineroPage() {
           <p className="app-subtitle">Panel de control de pedidos en tiempo real y flujo de preparación</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={toggleTheme}
+            style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem', cursor: 'pointer' }}
+            title="Cambiar Tema"
+          >
+            {theme === 'light' ? '🌙 Modo Oscuro' : '☀️ Modo Claro'}
+          </button>
           <span className="badge badge-success" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>🟢 Sistema Sincronizado</span>
         </div>
       </header>
@@ -309,104 +367,160 @@ export default function CocineroPage() {
                             {getTiempoTranscurrido(pedido.createdAt)}
                           </span>
                         </div>
-
-                        {/* Items list with Checkboxes */}
+                        {/* Items list with Checkboxes and Rejection Option */}
                         <div style={{ padding: '0.85rem' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                            {pedido.detalles.map((det) => (
-                              <label
-                                key={det.id}
-                                className="flex-between"
-                                style={{
-                                  fontSize: '0.9rem',
-                                  cursor: 'pointer',
-                                  userSelect: 'none',
-                                  textDecoration: det.entregado ? 'line-through' : 'none',
-                                  opacity: det.entregado ? 0.5 : 1,
-                                }}
-                              >
-                                <span>
-                                  {det.producto?.nombre} <strong style={{ color: 'var(--color-primary)' }}>x{det.cantidad}</strong>
-                                </span>
-                                <input
-                                  type="checkbox"
-                                  checked={det.entregado}
-                                  onChange={() => toggleItemEntregado(pedido.id, det.id, det.entregado)}
+                            {pedido.detalles.map((det) => {
+                              const isItemRechazado = !!det.rechazado;
+                              return (
+                                <div
+                                  key={det.id}
+                                  className="flex-between"
                                   style={{
-                                    cursor: 'pointer',
-                                    width: '16px',
-                                    height: '16px',
-                                    accentColor: 'var(--color-primary)'
+                                    fontSize: '0.9rem',
+                                    alignItems: 'center',
+                                    textDecoration: (det.entregado || isItemRechazado) ? 'line-through' : 'none',
+                                    opacity: (det.entregado || isItemRechazado) ? 0.6 : 1,
+                                    padding: '0.15rem 0',
+                                    borderBottom: '1px dashed rgba(0,0,0,0.05)'
                                   }}
-                                />
-                              </label>
-                            ))}
+                                >
+                                  <span style={{ color: isItemRechazado ? 'var(--color-danger)' : 'var(--text-primary)' }}>
+                                    {det.producto?.nombre} <strong style={{ color: isItemRechazado ? 'var(--color-danger)' : 'var(--color-primary)' }}>x{det.cantidad}</strong>
+                                    {isItemRechazado && (
+                                      <span style={{ fontSize: '0.75rem', display: 'block', fontStyle: 'italic', fontWeight: 'bold' }}>
+                                        (Rechazado: {det.motivoRechazo || 'sin stock'})
+                                      </span>
+                                    )}
+                                    {det.exclusiones && det.exclusiones.length > 0 && (
+                                      <span style={{ fontSize: '0.75rem', display: 'block', color: 'var(--color-danger)' }}>
+                                        Sin: {det.exclusiones.join(', ')}
+                                      </span>
+                                    )}
+                                  </span>
+                                  
+                                  <div className="flex-gap-sm" style={{ alignItems: 'center' }}>
+                                    {!isItemRechazado && (
+                                      <button
+                                        onClick={() => handleRechazarPlato(pedido.id, det.id)}
+                                        title="Rechazar plato"
+                                        style={{
+                                          background: 'transparent',
+                                          border: 'none',
+                                          color: 'var(--color-danger)',
+                                          cursor: 'pointer',
+                                          fontSize: '0.85rem',
+                                          padding: '0.2rem'
+                                        }}
+                                      >
+                                        ❌
+                                      </button>
+                                    )}
+                                    <input
+                                      type="checkbox"
+                                      checked={det.entregado}
+                                      disabled={isItemRechazado}
+                                      onChange={() => toggleItemEntregado(pedido.id, det.id, det.entregado)}
+                                      style={{
+                                        cursor: isItemRechazado ? 'default' : 'pointer',
+                                        width: '16px',
+                                        height: '16px',
+                                        accentColor: 'var(--color-primary)'
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {/* Order Actions */}
-                          <div style={{ display: 'flex', gap: '0.4rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.65rem' }}>
-                            {pedido.estado === 'ESPERA' && (
-                              <button
-                                onClick={() => updateEstado(pedido.id, 'PROCESO')}
-                                className="btn btn-primary"
-                                style={{ flex: 1, padding: '0.4rem', fontSize: '0.75rem' }}
-                              >
-                                👨‍🍳 Cocinar
-                              </button>
-                            )}
-                            
-                            {pedido.estado === 'PROCESO' && (
-                              <>
-                                <button
-                                  onClick={() => updateEstado(pedido.id, 'RETRAZO')}
-                                  className="btn btn-secondary"
-                                  style={{ flex: 1, padding: '0.4rem', fontSize: '0.75rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
-                                >
-                                  🚨 Reclamar
-                                </button>
-                                <button
-                                  onClick={() => updateEstado(pedido.id, 'LISTO')}
-                                  className="btn btn-primary"
-                                  style={{ flex: 1.5, padding: '0.4rem', fontSize: '0.75rem' }}
-                                >
-                                  ✓ Listo
-                                </button>
-                              </>
-                            )}
-
-                            {pedido.estado === 'RETRAZO' && (
-                              <>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.65rem' }}>
+                            <div style={{ display: 'flex', gap: '0.4rem' }}>
+                              {pedido.estado === 'ESPERA' && (
                                 <button
                                   onClick={() => updateEstado(pedido.id, 'PROCESO')}
-                                  className="btn btn-secondary"
-                                  style={{ flex: 1, padding: '0.4rem', fontSize: '0.75rem' }}
-                                >
-                                  🍳 En Cocina
-                                </button>
-                                <button
-                                  onClick={() => updateEstado(pedido.id, 'LISTO')}
                                   className="btn btn-primary"
-                                  style={{ flex: 1.5, padding: '0.4rem', fontSize: '0.75rem' }}
+                                  style={{ flex: 1, padding: '0.4rem', fontSize: '0.75rem', cursor: 'pointer' }}
                                 >
-                                  ✓ Listo
+                                  👨‍🍳 Cocinar
                                 </button>
-                              </>
-                            )}
+                              )}
+                              
+                              {pedido.estado === 'PROCESO' && (
+                                <>
+                                  <button
+                                    onClick={() => updateEstado(pedido.id, 'RETRAZO')}
+                                    className="btn btn-secondary"
+                                    style={{ flex: 1, padding: '0.4rem', fontSize: '0.75rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger)', cursor: 'pointer' }}
+                                  >
+                                    🚨 Reclamar
+                                  </button>
+                                  <button
+                                    onClick={() => updateEstado(pedido.id, 'LISTO')}
+                                    className="btn btn-primary"
+                                    style={{ flex: 1.5, padding: '0.4rem', fontSize: '0.75rem', cursor: 'pointer' }}
+                                  >
+                                    ✓ Listo
+                                  </button>
+                                </>
+                              )}
 
-                            {pedido.estado === 'LISTO' && (
+                              {pedido.estado === 'RETRAZO' && (
+                                <>
+                                  <button
+                                    onClick={() => updateEstado(pedido.id, 'PROCESO')}
+                                    className="btn btn-secondary"
+                                    style={{ flex: 1, padding: '0.4rem', fontSize: '0.75rem', cursor: 'pointer' }}
+                                  >
+                                    🍳 En Cocina
+                                  </button>
+                                  <button
+                                    onClick={() => updateEstado(pedido.id, 'LISTO')}
+                                    className="btn btn-primary"
+                                    style={{ flex: 1.5, padding: '0.4rem', fontSize: '0.75rem', cursor: 'pointer' }}
+                                  >
+                                    ✓ Listo
+                                  </button>
+                                </>
+                              )}
+
+                              {pedido.estado === 'LISTO' && (
+                                <button
+                                  onClick={() => updateEstado(pedido.id, 'ENTREGADO')}
+                                  className="btn"
+                                  style={{
+                                    flex: 1,
+                                    padding: '0.4rem',
+                                    fontSize: '0.75rem',
+                                    backgroundColor: 'var(--color-success)',
+                                    color: '#FFFFFF',
+                                    borderColor: 'var(--color-success)',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  📦 Entregar
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Option to reject whole order */}
+                            {pedido.estado !== 'LISTO' && pedido.estado !== 'ENTREGADO' && (
                               <button
-                                onClick={() => updateEstado(pedido.id, 'ENTREGADO')}
-                                className="btn"
+                                onClick={() => handleRechazarPedido(pedido.id)}
+                                className="btn btn-secondary"
                                 style={{
-                                  flex: 1,
-                                  padding: '0.4rem',
-                                  fontSize: '0.75rem',
-                                  backgroundColor: 'var(--color-success)',
-                                  color: '#FFFFFF',
-                                  borderColor: 'var(--color-success)',
+                                  width: '100%',
+                                  padding: '0.35rem',
+                                  fontSize: '0.72rem',
+                                  color: 'var(--color-danger)',
+                                  borderColor: 'var(--color-danger)',
+                                  cursor: 'pointer',
+                                  fontWeight: 650,
+                                  backgroundColor: 'rgba(211, 47, 47, 0.02)'
                                 }}
                               >
-                                📦 Entregar
+                                ❌ Rechazar Todo el Pedido
                               </button>
                             )}
                           </div>

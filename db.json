@@ -3,18 +3,24 @@
     {
       "id": "mesa-1",
       "numero": 1,
-      "estado": "INACTIVE",
+      "estado": "ACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-14T22:06:57.574Z"
+      "updatedAt": "2026-06-16T17:30:19.423Z",
+      "sesionIniciadaAt": "2026-06-16T17:17:27.107Z",
+      "atendidaPor": "Mesero A",
+      "llamandoMesero": false
     },
     {
       "id": "mesa-2",
       "numero": 2,
-      "estado": "INACTIVE",
+      "estado": "ACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-14T22:11:21.806Z"
+      "updatedAt": "2026-06-16T17:58:57.807Z",
+      "sesionIniciadaAt": "2026-06-16T17:58:57.784Z",
+      "atendidaPor": "Mesero B",
+      "llamandoMesero": false
     },
     {
       "id": "mesa-3",
@@ -22,24 +28,30 @@
       "estado": "INACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-14T23:23:40.481Z",
-      "sesionIniciadaAt": null
+      "updatedAt": "2026-06-16T16:50:31.902Z",
+      "sesionIniciadaAt": null,
+      "atendidaPor": null,
+      "llamandoMesero": false
     },
     {
       "id": "mesa-4",
       "numero": 4,
-      "estado": "INACTIVE",
+      "estado": "ACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-14T22:06:57.574Z"
+      "updatedAt": "2026-06-16T18:05:39.327Z",
+      "sesionIniciadaAt": "2026-06-16T18:05:22.746Z",
+      "atendidaPor": "Mesero C"
     },
     {
       "id": "mesa-5",
       "numero": 5,
-      "estado": "INACTIVE",
-      "mesaPadreId": null,
+      "estado": "ACTIVE",
+      "mesaPadreId": "mesa-4",
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-14T22:06:57.574Z"
+      "updatedAt": "2026-06-16T18:05:38.142Z",
+      "sesionIniciadaAt": "2026-06-16T18:05:22.746Z",
+      "atendidaPor": "Mesero C"
     },
     {
       "id": "mesa-6",
@@ -361,6 +373,63 @@
           "cantidad": 3,
           "entregado": true,
           "createdAt": "2026-06-14T23:22:18.649Z",
+          "exclusiones": []
+        }
+      ]
+    },
+    {
+      "id": "ped-s9nvxwp",
+      "mesaId": "mesa-2",
+      "estado": "ENTREGADO",
+      "createdAt": "2026-06-14T23:48:06.808Z",
+      "updatedAt": "2026-06-14T23:48:32.919Z",
+      "detalles": [
+        {
+          "id": "det-ped-s9nvxwp-0-4ek",
+          "pedidoId": "ped-s9nvxwp",
+          "productoId": "prod-noquis",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:48:06.808Z",
+          "exclusiones": []
+        }
+      ]
+    },
+    {
+      "id": "ped-xm9hwlw",
+      "mesaId": "mesa-2",
+      "estado": "ENTREGADO",
+      "createdAt": "2026-06-14T23:48:47.926Z",
+      "updatedAt": "2026-06-14T23:49:55.354Z",
+      "detalles": [
+        {
+          "id": "det-ped-xm9hwlw-0-lz7",
+          "pedidoId": "ped-xm9hwlw",
+          "productoId": "prod-noquis",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-14T23:48:47.926Z",
+          "exclusiones": [],
+          "rechazado": true,
+          "motivoRechazo": "falta de stock"
+        }
+      ],
+      "motivoRechazo": "falta de stock"
+    },
+    {
+      "id": "ped-ugryeq7",
+      "mesaId": "mesa-1",
+      "estado": "ENTREGADO",
+      "createdAt": "2026-06-16T17:16:35.762Z",
+      "updatedAt": "2026-06-16T17:16:58.869Z",
+      "detalles": [
+        {
+          "id": "det-ped-ugryeq7-0-l3a",
+          "pedidoId": "ped-ugryeq7",
+          "productoId": "prod-bife",
+          "cantidad": 1,
+          "entregado": true,
+          "createdAt": "2026-06-16T17:16:35.762Z",
           "exclusiones": []
         }
       ]

@@ -38,7 +38,7 @@ const DEFAULT_PRODUCTOS: Producto[] = [
     precio: 2500,
     categoriaId: 'cat-entradas',
     activo: true,
-    imagenUrl: 'https://images.unsplash.com/photo-1559561853-084cf17f28fa?w=150&auto=format&fit=crop&q=60',
+    imagenUrl: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=150&auto=format&fit=crop&q=60',
     ingredientes: ['Queso Provolone', 'Orégano', 'Aceite de oliva', 'Chimichurri', 'Pimentón']
   },
   {
@@ -78,7 +78,7 @@ const DEFAULT_PRODUCTOS: Producto[] = [
     precio: 1000,
     categoriaId: 'cat-bebidas',
     activo: true,
-    imagenUrl: 'https://images.unsplash.com/photo-1608885898957-a599fb1b4600?w=150&auto=format&fit=crop&q=60',
+    imagenUrl: 'https://images.unsplash.com/photo-1523362628745-0c100150b504?w=150&auto=format&fit=crop&q=60',
     ingredientes: ['Agua de manantial natural purificada']
   },
   {
@@ -108,7 +108,7 @@ const DEFAULT_PRODUCTOS: Producto[] = [
     precio: 1500,
     categoriaId: 'cat-postres',
     activo: true,
-    imagenUrl: 'https://images.unsplash.com/photo-1528975604071-b4da52a2d659?w=150&auto=format&fit=crop&q=60',
+    imagenUrl: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=150&auto=format&fit=crop&q=60',
     ingredientes: ['Huevos frescos', 'Leche entera', 'Azúcar', 'Esencia de vainilla', 'Dulce de leche', 'Crema chantilly']
   },
   {
@@ -228,11 +228,15 @@ export const MockService = {
     // Si se desactiva una mesa combinada, descombinamos
     if (estado === 'INACTIVE') {
       mesas[index]!.mesaPadreId = null;
+      mesas[index]!.atendidaPor = null;
+      mesas[index]!.llamandoMesero = false;
       mesas.forEach((m) => {
         if (m.mesaPadreId === id) {
           m.mesaPadreId = null;
           m.estado = 'INACTIVE';
           m.sesionIniciadaAt = null;
+          m.atendidaPor = null;
+          m.llamandoMesero = false;
           m.updatedAt = new Date().toISOString();
         }
       });
@@ -330,7 +334,7 @@ export const MockService = {
     const targetMesaId = mesa.mesaPadreId || mesa.id;
     
     let pedidoActivo = pedidos.find(
-      (p) => p.mesaId === targetMesaId && p.estado !== 'ENTREGADO'
+      (p) => p.mesaId === targetMesaId && p.estado !== 'ENTREGADO' && p.estado !== 'RECHAZADO'
     );
 
     if (pedidoActivo) {
@@ -483,5 +487,108 @@ export const MockService = {
     await setStorageItem('md_pedidos', pedidos);
     const allPeds = await this.getPedidos();
     return allPeds.find((p) => p.id === pedidoId)!;
+  },
+
+  async llamarMesero(mesaId: string, llamando: boolean): Promise<Mesa> {
+    const mesas = await this.getMesas();
+    const index = mesas.findIndex((m) => m.id === mesaId);
+    if (index === -1) throw new Error('Mesa no encontrada');
+
+    mesas[index]!.llamandoMesero = llamando;
+    mesas[index]!.updatedAt = new Date().toISOString();
+
+    await setStorageItem('md_mesas', mesas);
+    return mesas[index]!;
+  },
+
+  async asignarMeseroAMesa(mesaId: string, meseroId: string | null): Promise<Mesa> {
+    const mesas = await this.getMesas();
+    const index = mesas.findIndex((m) => m.id === mesaId);
+    if (index === -1) throw new Error('Mesa no encontrada');
+
+    mesas[index]!.atendidaPor = meseroId;
+    mesas[index]!.updatedAt = new Date().toISOString();
+
+    await setStorageItem('md_mesas', mesas);
+    return mesas[index]!;
+  },
+
+  async rechazarPedido(pedidoId: string, motivo: string): Promise<Pedido> {
+    const pedidos = await getStorageItem<Pedido[]>('md_pedidos', []);
+    const index = pedidos.findIndex((p) => p.id === pedidoId);
+    if (index === -1) throw new Error('Pedido no encontrado');
+
+    const pedido = pedidos[index]!;
+    pedido.estado = 'RECHAZADO';
+    pedido.motivoRechazo = motivo;
+    pedido.updatedAt = new Date().toISOString();
+
+    pedido.detalles.forEach((det) => {
+      det.entregado = true;
+      det.rechazado = true;
+      det.motivoRechazo = motivo;
+    });
+
+    await setStorageItem('md_pedidos', pedidos);
+    const allPeds = await this.getPedidos();
+    return allPeds.find((p) => p.id === pedidoId)!;
+  },
+
+  async rechazarDetallePedido(pedidoId: string, detalleId: string, motivo: string): Promise<Pedido> {
+    const pedidos = await getStorageItem<Pedido[]>('md_pedidos', []);
+    const index = pedidos.findIndex((p) => p.id === pedidoId);
+    if (index === -1) throw new Error('Pedido no encontrado');
+
+    const pedido = pedidos[index]!;
+    const det = pedido.detalles.find((d) => d.id === detalleId);
+    if (!det) throw new Error('Detalle no encontrado');
+
+    det.rechazado = true;
+    det.motivoRechazo = motivo;
+    det.entregado = true;
+    pedido.updatedAt = new Date().toISOString();
+
+    const todosEntregados = pedido.detalles.every((d) => d.entregado);
+    if (todosEntregados) {
+      const todosRechazados = pedido.detalles.every((d) => d.rechazado);
+      if (todosRechazados) {
+        pedido.estado = 'RECHAZADO';
+        pedido.motivoRechazo = 'Todos los ítems fueron rechazados';
+      } else {
+        pedido.estado = 'ENTREGADO';
+      }
+    }
+
+    await setStorageItem('md_pedidos', pedidos);
+    const allPeds = await this.getPedidos();
+    return allPeds.find((p) => p.id === pedidoId)!;
+  },
+
+  async pagarPedidosDeMesa(mesaId: string): Promise<Pedido[]> {
+    const pedidos = await getStorageItem<Pedido[]>('md_pedidos', []);
+    const filtrados = pedidos.filter((p) => p.mesaId === mesaId && !p.pagado);
+    filtrados.forEach((p) => {
+      p.pagado = true;
+      p.estado = 'ENTREGADO';
+      p.updatedAt = new Date().toISOString();
+      p.detalles.forEach((det) => {
+        det.entregado = true;
+      });
+    });
+    await setStorageItem('md_pedidos', pedidos);
+    notifyChanges();
+    return this.getPedidos();
+  },
+
+  async reiniciarSesionMesa(id: string): Promise<Mesa> {
+    const mesas = await this.getMesas();
+    const index = mesas.findIndex((m) => m.id === id);
+    if (index === -1) throw new Error('Mesa no encontrada');
+
+    mesas[index]!.sesionIniciadaAt = new Date().toISOString();
+    mesas[index]!.updatedAt = new Date().toISOString();
+
+    await setStorageItem('md_mesas', mesas);
+    return mesas[index]!;
   },
 };
