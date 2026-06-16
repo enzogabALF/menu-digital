@@ -191,7 +191,7 @@ export default function MeseroPage() {
           left: '50%',
           transform: 'translateX(-50%)',
           backgroundColor: 'var(--color-success)',
-          color: '#FFFFFF',
+          color: 'var(--color-success-text)',
           padding: '0.85rem 1.5rem',
           borderRadius: 'var(--border-radius-md)',
           boxShadow: '0 4px 15px rgba(46,125,50,0.25)',
@@ -209,7 +209,7 @@ export default function MeseroPage() {
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#FFFFFF',
+              color: 'var(--color-success-text)',
               cursor: 'pointer',
               fontWeight: 'bold',
               fontSize: '1rem',
@@ -404,7 +404,7 @@ export default function MeseroPage() {
                                 padding: '0.25rem',
                                 fontSize: '0.7rem',
                                 backgroundColor: 'var(--color-primary)',
-                                color: '#FFFFFF',
+                                color: 'var(--color-primary-text)',
                                 borderColor: 'var(--color-primary)',
                                 borderRadius: 'var(--border-radius-sm)',
                                 cursor: 'pointer'
@@ -461,7 +461,7 @@ export default function MeseroPage() {
                                   borderRadius: 'var(--border-radius-sm)',
                                   backgroundColor: 'var(--color-success)',
                                   borderColor: 'var(--color-success)',
-                                  color: '#FFFFFF',
+                                  color: 'var(--color-success-text)',
                                   cursor: 'pointer'
                                 }}
                               >
@@ -583,7 +583,7 @@ export default function MeseroPage() {
               style={{
                 width: '100%',
                 backgroundColor: 'var(--color-primary)',
-                color: '#FFFFFF',
+                color: 'var(--color-primary-text)',
                 borderColor: 'var(--color-primary)'
               }}
             >
@@ -729,7 +729,7 @@ export default function MeseroPage() {
                                   fontSize: '0.75rem',
                                   backgroundColor: 'var(--color-success)',
                                   borderColor: 'var(--color-success)',
-                                  color: '#FFFFFF',
+                                  color: 'var(--color-success-text)',
                                   cursor: 'pointer'
                                 }}
                               >
@@ -903,7 +903,7 @@ export default function MeseroPage() {
                         width: '100%',
                         marginTop: '0.75rem',
                         backgroundColor: 'var(--color-primary)',
-                        color: '#FFFFFF',
+                        color: 'var(--color-primary-text)',
                         borderColor: 'var(--color-primary)',
                         cursor: 'pointer'
                       }}

@@ -3,12 +3,12 @@
     {
       "id": "mesa-1",
       "numero": 1,
-      "estado": "ACTIVE",
+      "estado": "INACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-16T17:30:19.423Z",
-      "sesionIniciadaAt": "2026-06-16T17:17:27.107Z",
-      "atendidaPor": "Mesero A",
+      "updatedAt": "2026-06-16T21:51:25.918Z",
+      "sesionIniciadaAt": null,
+      "atendidaPor": null,
       "llamandoMesero": false
     },
     {
@@ -25,12 +25,12 @@
     {
       "id": "mesa-3",
       "numero": 3,
-      "estado": "INACTIVE",
+      "estado": "ACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-16T16:50:31.902Z",
-      "sesionIniciadaAt": null,
-      "atendidaPor": null,
+      "updatedAt": "2026-06-16T21:42:17.852Z",
+      "sesionIniciadaAt": "2026-06-16T21:42:17.798Z",
+      "atendidaPor": "Mesero A",
       "llamandoMesero": false
     },
     {
@@ -68,7 +68,10 @@
       "estado": "INACTIVE",
       "mesaPadreId": null,
       "createdAt": "2026-06-14T22:06:57.574Z",
-      "updatedAt": "2026-06-14T22:06:57.574Z"
+      "updatedAt": "2026-06-16T21:51:24.151Z",
+      "sesionIniciadaAt": null,
+      "atendidaPor": null,
+      "llamandoMesero": false
     },
     {
       "id": "mesa-8",

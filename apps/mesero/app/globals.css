@@ -6,9 +6,12 @@
 
   /* Semánticos */
   --color-danger: #D32F2F;
+  --color-danger-text: #FFFFFF;
   --color-danger-bg: #FFEBEE;
   --color-success: #2E7D32;
+  --color-success-text: #FFFFFF;
   --color-warning: #F57C00;
+  --color-warning-text: #FFFFFF;
 
   /* Neutros */
   --bg-primary: #FFFFFF;
@@ -37,9 +40,12 @@
 
   /* Semánticos - Escala de Grises */
   --color-danger: #8E8E93;
+  --color-danger-text: #121212;
   --color-danger-bg: #2C2C2E;
   --color-success: #E5E5EA;
+  --color-success-text: #121212;
   --color-warning: #C7C7CC;
+  --color-warning-text: #121212;
 
   /* Neutros */
   --bg-primary: #1C1C1E;

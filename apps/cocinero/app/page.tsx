@@ -157,14 +157,14 @@ export default function CocineroPage() {
   const getHeaderStyle = (status: OrderStatus) => {
     switch (status) {
       case 'RETRAZO':
-        return { backgroundColor: 'var(--color-danger)', color: '#FFFFFF' };
+        return { backgroundColor: 'var(--color-danger)', color: 'var(--color-danger-text)' };
       case 'LISTO':
-        return { backgroundColor: 'var(--color-success)', color: '#FFFFFF' };
+        return { backgroundColor: 'var(--color-success)', color: 'var(--color-success-text)' };
       case 'PROCESO':
-        return { backgroundColor: 'var(--color-warning)', color: '#FFFFFF' };
+        return { backgroundColor: 'var(--color-warning)', color: 'var(--color-warning-text)' };
       case 'ESPERA':
       default:
-        return { backgroundColor: 'var(--text-secondary)', color: '#FFFFFF' };
+        return { backgroundColor: 'var(--text-secondary)', color: 'var(--color-danger-text)' };
     }
   };
 
@@ -292,7 +292,7 @@ export default function CocineroPage() {
                 width: '100%',
                 backgroundColor: selectedOrder?.estado === 'RETRAZO' ? 'var(--color-success)' : 'var(--color-danger)',
                 borderColor: selectedOrder?.estado === 'RETRAZO' ? 'var(--color-success)' : 'var(--color-danger)',
-                color: '#FFFFFF',
+                color: selectedOrder?.estado === 'RETRAZO' ? 'var(--color-success-text)' : 'var(--color-danger-text)',
                 opacity: (!selectedMesaId || !selectedOrder) ? 0.5 : 1,
               }}
             >
@@ -494,7 +494,7 @@ export default function CocineroPage() {
                                     padding: '0.4rem',
                                     fontSize: '0.75rem',
                                     backgroundColor: 'var(--color-success)',
-                                    color: '#FFFFFF',
+                                    color: 'var(--color-success-text)',
                                     borderColor: 'var(--color-success)',
                                     cursor: 'pointer'
                                   }}
